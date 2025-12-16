@@ -1,0 +1,15 @@
+{
+  "power_cap_W": 25.0,
+  "nominal_fraction": 0.75,
+  "lowres_N": 256,
+  "highres_N": 1024,
+  "refine_steps": 4,
+  "tile_px_x": 64,
+  "tile_px_y": 64,
+  "ring_radius": 0.38,
+  "ring_sigma": 0.04,
+  "source_image": "bluemarble.ppm",
+  "out_dir": "out",
+  "write_ppm": true,
+  "write_pgm": true
+}
