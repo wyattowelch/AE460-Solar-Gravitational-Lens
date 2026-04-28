@@ -1,0 +1,6 @@
+/home/bunta/sgl/sgl_comms_module/build/CMakeFiles/sgl_comms_module.dir
+/home/bunta/sgl/sgl_comms_module/build/CMakeFiles/comms_standalone_demo.dir
+/home/bunta/sgl/sgl_comms_module/build/CMakeFiles/test_comms.dir
+/home/bunta/sgl/sgl_comms_module/build/CMakeFiles/test.dir
+/home/bunta/sgl/sgl_comms_module/build/CMakeFiles/edit_cache.dir
+/home/bunta/sgl/sgl_comms_module/build/CMakeFiles/rebuild_cache.dir
