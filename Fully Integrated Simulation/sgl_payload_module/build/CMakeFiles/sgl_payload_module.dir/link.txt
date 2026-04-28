@@ -1,0 +1,2 @@
+/usr/bin/ar qc libsgl_payload_module.a CMakeFiles/sgl_payload_module.dir/src/payload_module.cpp.o
+/usr/bin/ranlib libsgl_payload_module.a

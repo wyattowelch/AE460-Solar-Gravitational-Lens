@@ -1,0 +1,6 @@
+/home/bunta/sgl/sgl_star_tracker_module/sgl_star_tracker_module/build/CMakeFiles/sgl_star_tracker.dir
+/home/bunta/sgl/sgl_star_tracker_module/sgl_star_tracker_module/build/CMakeFiles/star_tracker_demo.dir
+/home/bunta/sgl/sgl_star_tracker_module/sgl_star_tracker_module/build/CMakeFiles/test_adcs_system.dir
+/home/bunta/sgl/sgl_star_tracker_module/sgl_star_tracker_module/build/CMakeFiles/test.dir
+/home/bunta/sgl/sgl_star_tracker_module/sgl_star_tracker_module/build/CMakeFiles/edit_cache.dir
+/home/bunta/sgl/sgl_star_tracker_module/sgl_star_tracker_module/build/CMakeFiles/rebuild_cache.dir

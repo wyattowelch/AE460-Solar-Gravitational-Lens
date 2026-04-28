@@ -1,0 +1,6 @@
+/home/bunta/sgl/sgl_propulsion_module/build/CMakeFiles/sgl_propulsion_module.dir
+/home/bunta/sgl/sgl_propulsion_module/build/CMakeFiles/propulsion_standalone_demo.dir
+/home/bunta/sgl/sgl_propulsion_module/build/CMakeFiles/test_propulsion.dir
+/home/bunta/sgl/sgl_propulsion_module/build/CMakeFiles/test.dir
+/home/bunta/sgl/sgl_propulsion_module/build/CMakeFiles/edit_cache.dir
+/home/bunta/sgl/sgl_propulsion_module/build/CMakeFiles/rebuild_cache.dir

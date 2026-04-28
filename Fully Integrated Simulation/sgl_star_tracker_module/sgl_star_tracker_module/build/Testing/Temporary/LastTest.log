@@ -1,0 +1,18 @@
+Start testing: Apr 26 03:46 PDT
+----------------------------------------------------------
+1/1 Testing: test_adcs_system
+1/1 Test: test_adcs_system
+Command: "/home/bunta/sgl/sgl_star_tracker_module/sgl_star_tracker_module/build/test_adcs_system"
+Directory: /home/bunta/sgl/sgl_star_tracker_module/sgl_star_tracker_module/build
+"test_adcs_system" start time: Apr 26 03:46 PDT
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_adcs_system" end time: Apr 26 03:46 PDT
+"test_adcs_system" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Apr 26 03:46 PDT

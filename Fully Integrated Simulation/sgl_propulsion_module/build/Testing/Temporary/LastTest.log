@@ -1,0 +1,18 @@
+Start testing: Apr 26 03:45 PDT
+----------------------------------------------------------
+1/1 Testing: test_propulsion
+1/1 Test: test_propulsion
+Command: "/home/bunta/sgl/sgl_propulsion_module/build/test_propulsion"
+Directory: /home/bunta/sgl/sgl_propulsion_module/build
+"test_propulsion" start time: Apr 26 03:45 PDT
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_propulsion" end time: Apr 26 03:45 PDT
+"test_propulsion" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Apr 26 03:45 PDT

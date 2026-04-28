@@ -1,0 +1,2 @@
+/usr/bin/ar qc libsgl_thermal_module.a CMakeFiles/sgl_thermal_module.dir/src/thermal_module.cpp.o
+/usr/bin/ranlib libsgl_thermal_module.a
