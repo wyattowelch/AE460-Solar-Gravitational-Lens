@@ -1,0 +1,6 @@
+/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_comms_module_standalone_build/CMakeFiles/sgl_comms_module.dir
+/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_comms_module_standalone_build/CMakeFiles/comms_standalone_demo.dir
+/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_comms_module_standalone_build/CMakeFiles/test_comms.dir
+/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_comms_module_standalone_build/CMakeFiles/test.dir
+/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_comms_module_standalone_build/CMakeFiles/edit_cache.dir
+/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_comms_module_standalone_build/CMakeFiles/rebuild_cache.dir

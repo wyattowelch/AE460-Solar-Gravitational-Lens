@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/test_adcs_system.dir/tests/test_adcs_system.cpp.o -o test_adcs_system  libsgl_star_tracker.a 

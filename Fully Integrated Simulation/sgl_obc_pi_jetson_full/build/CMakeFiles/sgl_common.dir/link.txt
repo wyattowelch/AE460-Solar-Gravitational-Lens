@@ -1,0 +1,2 @@
+/usr/bin/ar qc libsgl_common.a CMakeFiles/sgl_common.dir/common/config.cpp.o CMakeFiles/sgl_common.dir/common/image_io.cpp.o CMakeFiles/sgl_common.dir/common/protocol.cpp.o CMakeFiles/sgl_common.dir/common/net.cpp.o CMakeFiles/sgl_common.dir/common/reconstruction.cpp.o
+/usr/bin/ranlib libsgl_common.a

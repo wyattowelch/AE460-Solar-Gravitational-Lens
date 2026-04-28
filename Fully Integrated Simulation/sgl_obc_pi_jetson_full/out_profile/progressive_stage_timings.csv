@@ -1,0 +1,12 @@
+profile_name,stage_index,out_n,observations_used,new_observations_added,roi_count,coarse_runtime_ms,refine_runtime_ms,roi_selection_ms,total_stage_runtime_ms,coarse_path,refined_path
+fast_demo,0,128,8,8,8,6.94941,4.29257,0.607992,11.242,out_profile/fast_demo/products/dataset_0_s0_coarse_128.ppm,out_profile/fast_demo/products/dataset_0_s0_refined_128.ppm
+fast_demo,1,256,32,24,10,21.5534,16.4622,2.72243,38.0156,out_profile/fast_demo/products/dataset_0_s1_coarse_256.ppm,out_profile/fast_demo/products/dataset_0_s1_refined_256.ppm
+balanced_demo,0,128,8,8,8,27.6386,2.82576,0.604151,30.4643,out_profile/balanced_demo/products/dataset_0_s0_coarse_128.ppm,out_profile/balanced_demo/products/dataset_0_s0_refined_128.ppm
+balanced_demo,1,256,32,24,10,12.8981,16.285,2.45173,29.1831,out_profile/balanced_demo/products/dataset_0_s1_coarse_256.ppm,out_profile/balanced_demo/products/dataset_0_s1_refined_256.ppm
+balanced_demo,2,512,96,64,12,69.4528,1367.17,7.83177,1436.62,out_profile/balanced_demo/products/dataset_0_s2_coarse_512.ppm,out_profile/balanced_demo/products/dataset_0_s2_refined_512.ppm
+full_demo,0,128,8,8,8,171.88,1.2027,0.728891,173.083,out_profile/full_demo/products/dataset_0_s0_coarse_128.ppm,out_profile/full_demo/products/dataset_0_s0_refined_128.ppm
+full_demo,1,256,32,24,10,93.2928,28.0374,2.6172,121.33,out_profile/full_demo/products/dataset_0_s1_coarse_256.ppm,out_profile/full_demo/products/dataset_0_s1_refined_256.ppm
+full_demo,2,512,96,64,12,195.07,254.937,8.67461,450.008,out_profile/full_demo/products/dataset_0_s2_coarse_512.ppm,out_profile/full_demo/products/dataset_0_s2_refined_512.ppm
+stress,0,128,16,16,10,415.412,416.018,1.67992,831.43,out_profile/stress/products/dataset_0_s0_coarse_128.ppm,out_profile/stress/products/dataset_0_s0_refined_128.ppm
+stress,1,256,64,48,13,1624,1651.79,6.43278,3275.79,out_profile/stress/products/dataset_0_s1_coarse_256.ppm,out_profile/stress/products/dataset_0_s1_refined_256.ppm
+stress,2,512,192,128,16,5101.13,5127.46,20.7131,10228.6,out_profile/stress/products/dataset_0_s2_coarse_512.ppm,out_profile/stress/products/dataset_0_s2_refined_512.ppm

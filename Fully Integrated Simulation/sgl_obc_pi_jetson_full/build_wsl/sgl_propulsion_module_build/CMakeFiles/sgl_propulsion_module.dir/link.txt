@@ -1,0 +1,2 @@
+/usr/bin/ar qc libsgl_propulsion_module.a CMakeFiles/sgl_propulsion_module.dir/src/propulsion_module.cpp.o
+/usr/bin/ranlib libsgl_propulsion_module.a

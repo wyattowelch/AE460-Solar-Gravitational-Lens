@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/sgl_jetson_service.dir/link.d CMakeFiles/sgl_jetson_service.dir/jetson_processing/main.cpp.o -o sgl_jetson_service  libsgl_jetson_lib.a libsgl_common.a /usr/lib/gcc/x86_64-linux-gnu/14/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a

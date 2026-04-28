@@ -1,0 +1,5 @@
+profile_name,stages,observations_by_stage,max_resolution,total_runtime_ms,ring_generation_ms,reconstruction_ms,roi_selection_ms,products_written,manifest_rows,completed_required_stages,completed_optional_stages,missing_required_outputs,missing_optional_outputs,scheduler_throttle_count,scheduler_suspend_count,output_dir,exit_status
+fast_demo,"128|256","8|32",256,5736,413.439401,49.257580000000004,3.330422,4,4,"128|256","","","",0,0,"/home/bunta/sgl/sgl_obc_pi_jetson_full/out_profile/fast_demo",0
+balanced_demo,"128|256|512","8|32|96",512,7127,426.269655,1496.27026,10.887651,6,6,"128|256|512","","","",71,0,"/home/bunta/sgl/sgl_obc_pi_jetson_full/out_profile/balanced_demo",0
+full_demo,"128|256|512|1024","8|32|96|192",1024,11358,382.765875,744.4199,12.020700999999999,7,7,"128|256|512","","","1024:refined",131,0,"/home/bunta/sgl/sgl_obc_pi_jetson_full/out_profile/full_demo",0
+stress,"128|256|512|1024","16|64|192|384",1024,40058,397.662745,14335.810000000001,28.8258,7,7,"128|256|512","","","1024:refined",171,0,"/home/bunta/sgl/sgl_obc_pi_jetson_full/out_profile/stress",0

@@ -1,0 +1,7 @@
+/mnt/data/sgl_obc_pi_jetson_full/build/CMakeFiles/sgl_common.dir
+/mnt/data/sgl_obc_pi_jetson_full/build/CMakeFiles/sgl_pi_lib.dir
+/mnt/data/sgl_obc_pi_jetson_full/build/CMakeFiles/sgl_jetson_lib.dir
+/mnt/data/sgl_obc_pi_jetson_full/build/CMakeFiles/sgl_pi_flight.dir
+/mnt/data/sgl_obc_pi_jetson_full/build/CMakeFiles/sgl_jetson_service.dir
+/mnt/data/sgl_obc_pi_jetson_full/build/CMakeFiles/edit_cache.dir
+/mnt/data/sgl_obc_pi_jetson_full/build/CMakeFiles/rebuild_cache.dir

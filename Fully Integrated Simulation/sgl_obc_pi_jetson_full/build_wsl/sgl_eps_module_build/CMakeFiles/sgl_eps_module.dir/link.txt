@@ -1,0 +1,2 @@
+/usr/bin/ar qc libsgl_eps_module.a CMakeFiles/sgl_eps_module.dir/src/eps_module.cpp.o
+/usr/bin/ranlib libsgl_eps_module.a

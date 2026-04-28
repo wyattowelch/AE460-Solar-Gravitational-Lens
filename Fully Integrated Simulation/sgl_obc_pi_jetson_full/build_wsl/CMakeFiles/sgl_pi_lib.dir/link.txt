@@ -1,0 +1,2 @@
+/usr/bin/ar qc libsgl_pi_lib.a CMakeFiles/sgl_pi_lib.dir/pi_flight/subsystems.cpp.o
+/usr/bin/ranlib libsgl_pi_lib.a

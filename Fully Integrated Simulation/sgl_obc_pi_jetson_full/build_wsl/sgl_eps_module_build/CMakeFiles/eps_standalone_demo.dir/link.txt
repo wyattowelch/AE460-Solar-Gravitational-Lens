@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/eps_standalone_demo.dir/examples/standalone_demo.cpp.o -o eps_standalone_demo  libsgl_eps_module.a 

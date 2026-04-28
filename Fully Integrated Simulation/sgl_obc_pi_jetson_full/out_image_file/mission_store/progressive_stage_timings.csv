@@ -1,0 +1,7 @@
+profile_name,stage_index,out_n,observations_used,new_observations_added,roi_count,coarse_runtime_ms,refine_runtime_ms,roi_selection_ms,total_stage_runtime_ms,coarse_path,refined_path
+"default",0,128,1,1,8,25.3526,18.8531,0.094217,44.2057,"out_image_file/products/dataset_0_s0_coarse_128.ppm","out_image_file/products/dataset_0_s0_refined_128.ppm"
+"default",1,256,1,0,10,19.1064,20.003,0.094812,39.1094,"out_image_file/products/dataset_0_s1_coarse_256.ppm","out_image_file/products/dataset_0_s1_refined_256.ppm"
+"default",2,512,1,0,12,19.616,21.4867,0.100898,41.1027,"out_image_file/products/dataset_0_s2_coarse_512.ppm","out_image_file/products/dataset_0_s2_refined_512.ppm"
+"default",0,128,1,1,8,26.078,19.9989,0.096725,46.0769,"out_image_file/products/dataset_0_s0_coarse_128.ppm","out_image_file/products/dataset_0_s0_refined_128.ppm"
+"default",1,256,1,0,10,19.7487,19.8569,0.101646,39.6055,"out_image_file/products/dataset_0_s1_coarse_256.ppm","out_image_file/products/dataset_0_s1_refined_256.ppm"
+"default",2,512,1,0,12,20.1104,20.9317,0.094626,41.0421,"out_image_file/products/dataset_0_s2_coarse_512.ppm","out_image_file/products/dataset_0_s2_refined_512.ppm"
