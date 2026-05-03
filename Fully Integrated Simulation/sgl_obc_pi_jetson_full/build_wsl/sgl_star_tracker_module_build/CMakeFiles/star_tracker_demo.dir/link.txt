@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/star_tracker_demo.dir/examples/star_tracker_demo.cpp.o -o star_tracker_demo  libsgl_star_tracker.a 

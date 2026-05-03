@@ -1,4 +1,0 @@
-profile_name,stage_index,out_n,observations_used,new_observations_added,roi_count,coarse_runtime_ms,refine_runtime_ms,roi_selection_ms,total_stage_runtime_ms,coarse_path,refined_path
-"stress",0,128,16,16,10,415.412,416.018,1.67992,831.43,"out_profile/stress/products/dataset_0_s0_coarse_128.ppm","out_profile/stress/products/dataset_0_s0_refined_128.ppm"
-"stress",1,256,64,48,13,1624,1651.79,6.43278,3275.79,"out_profile/stress/products/dataset_0_s1_coarse_256.ppm","out_profile/stress/products/dataset_0_s1_refined_256.ppm"
-"stress",2,512,192,128,16,5101.13,5127.46,20.7131,10228.6,"out_profile/stress/products/dataset_0_s2_coarse_512.ppm","out_profile/stress/products/dataset_0_s2_refined_512.ppm"

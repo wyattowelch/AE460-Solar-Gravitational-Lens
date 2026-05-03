@@ -439,7 +439,7 @@ void PropulsionSim::act(double){
 }
 std::string PropulsionSim::mode_string() const { return mode_; }
 
-void PayloadSim::configure(const std::string& source_ppm,int tile_px_x,int tile_px_y,int ring_N,double ring_radius,double ring_sigma,const std::string& out_dir,const std::string& input_mode,double fusion_alpha){
+void PayloadSim::configure(const std::string& source_ppm,int tile_px_x,int tile_px_y,int ring_N,double ring_radius,double ring_sigma,const std::string& out_dir,const std::string& input_mode,double fusion_alpha,const SourcePreconditioningConfig& pre_cfg,const SglObservationConfig& obs_cfg,const std::string& reconstruction_mode){
   source_ppm_=source_ppm;
   tile_px_x_=tile_px_x;
   tile_px_y_=tile_px_y;
@@ -450,6 +450,9 @@ void PayloadSim::configure(const std::string& source_ppm,int tile_px_x,int tile_
   input_mode_=input_mode;
   if (input_mode_ == "synthetic_truth") input_mode_ = "synthetic_image";
   fusion_alpha_=std::clamp(fusion_alpha,0.01,1.0);
+  pre_cfg_ = pre_cfg;
+  obs_cfg_ = obs_cfg;
+  reconstruction_mode_ = reconstruction_mode;
   camera_mode_ = input_mode_;
 }
 void PayloadSim::sense(double dt_s){ t_s_ += dt_s; pending_dt_s_ = dt_s; }
@@ -475,6 +478,21 @@ void PayloadSim::act(double){
   contrast_score_ = 0.0;
   raw_capture_path_.clear();
   rectified_image_path_.clear();
+  preconditioned_source_path_.clear();
+  source_object_type_detected_ = "unknown";
+  source_bbox_string_.clear();
+  source_fill_fraction_used_ = 0.0;
+  source_margin_fraction_before_ = 0.0;
+  source_margin_fraction_ = 0.0;
+  source_truncation_suspected_ = false;
+  used_raw_fallback_for_preconditioning_ = false;
+  source_clipping_guard_triggered_ = false;
+  detected_planet_center_x_ = 0.0;
+  detected_planet_center_y_ = 0.0;
+  detected_planet_radius_px_ = 0.0;
+  preconditioning_method_ = "none";
+  alignment_method_ = "none";
+  ring_summary_ = SglObservationSummary{};
 
   if (dataset_ready_) {
     fs::create_directories(out_dir_);
@@ -552,6 +570,7 @@ void PayloadSim::act(double){
           if (homography_from_4pt(dst_pts, src_pts, invH)) {
             rectified = warp_with_inverse_homography(capture, invH, out_s, out_s);
             alignment_valid_ = true;
+            alignment_method_ = "marker_homography";
             for (const auto& p : src_pts) {
               const int px = std::clamp(static_cast<int>(std::lround(p.first)), 1, static_cast<int>(overlay.w) - 2);
               const int py = std::clamp(static_cast<int>(std::lround(p.second)), 1, static_cast<int>(overlay.h) - 2);
@@ -576,6 +595,7 @@ void PayloadSim::act(double){
               rectified = center_crop_square(capture);
             }
             alignment_valid_ = false;
+            alignment_method_ = "homography_failed_bbox_or_center";
             pending_events_.push_back(PayloadEvent{"payload_alignment_failed", "warn", "Homography solve failed; using center-crop fallback", ""});
           }
         } else {
@@ -585,10 +605,12 @@ void PayloadSim::act(double){
             rectified = crop_bbox_square(capture, x0, y0, x1, y1);
             draw_bbox_overlay(overlay, x0, y0, x1, y1, 255, 160, 64);
             alignment_score_ = 0.25 + 0.45 * bbox_conf;
+            alignment_method_ = "content_bbox_fallback";
             pending_events_.push_back(PayloadEvent{"payload_alignment_failed", "warn", "Markers not detected; content-bbox fallback", std::to_string(alignment_score_)});
           } else {
             rectified = center_crop_square(capture);
             alignment_score_ = 0.0;
+            alignment_method_ = "center_crop_fallback";
             pending_events_.push_back(PayloadEvent{"payload_alignment_failed", "warn", "Markers not detected; using center-crop fallback", ""});
           }
           alignment_valid_ = false;
@@ -612,24 +634,85 @@ void PayloadSim::act(double){
           ok = false;
         } else {
           pending_events_.push_back(PayloadEvent{"payload_capture_accepted", "info", "Payload capture accepted", dataset_id});
-          std::string ring_csv, ring_preview, ring_err;
-          unsigned ring_w = 0, ring_h = 0;
-          const auto t_ring0 = std::chrono::steady_clock::now();
-          const bool ring_like_ok = generate_payload_dataset_from_ring_observation(rectified_image_path_,tile_px_x_,tile_px_y_,ddir,ring_csv,ring_preview,ring_w,ring_h,ring_err);
-          const auto t_ring1 = std::chrono::steady_clock::now();
-          last_ring_generation_ms_ = std::chrono::duration<double,std::milli>(t_ring1-t_ring0).count();
-          if (ring_like_ok && blur_score_ > 0.00035 && contrast_score_ > 0.07) {
-            ok = true;
-            csv = ring_csv;
-            ring_path = ring_preview;
-            sw = ring_w;
-            sh = ring_h;
-            pending_events_.push_back(PayloadEvent{"ring_observation_used", "info", "Ring-like observation path selected", ring_path});
+          const auto t_pre0 = std::chrono::steady_clock::now();
+          SourcePreconditioningResult chosen{};
+          std::string chosen_err;
+          SourcePreconditioningResult pre_rect{};
+          std::string pre_rect_err;
+          const bool rect_ok = precondition_source_image(rectified_image_path_, ddir, pre_cfg_, pre_rect, pre_rect_err);
+          chosen = pre_rect;
+          chosen_err = pre_rect_err;
+          ok = rect_ok;
+          if ((!rect_ok || pre_rect.source_truncation_suspected) && !raw_capture_path_.empty() && raw_capture_path_ != rectified_image_path_) {
+            SourcePreconditioningResult pre_raw{};
+            std::string pre_raw_err;
+            const bool raw_ok = precondition_source_image(raw_capture_path_, ddir, pre_cfg_, pre_raw, pre_raw_err);
+            if (raw_ok) {
+              const bool prefer_raw =
+                  !rect_ok ||
+                  (!pre_raw.source_truncation_suspected && pre_rect.source_truncation_suspected) ||
+                  (pre_raw.source_margin_fraction_before > pre_rect.source_margin_fraction_before + 0.01);
+              if (prefer_raw) {
+                chosen = pre_raw;
+                chosen.used_raw_fallback_for_preconditioning = true;
+                chosen_err.clear();
+                ok = true;
+              }
+            } else if (!rect_ok) {
+              chosen_err = pre_raw_err;
+            }
+          }
+          const auto t_pre1 = std::chrono::steady_clock::now();
+          if (!ok) {
+            err = chosen_err;
+            pending_events_.push_back(PayloadEvent{"payload_capture_rejected", "warn", "Source preconditioning failed", chosen_err});
           } else {
-            const auto t_rg0 = std::chrono::steady_clock::now();
-            ok = generate_payload_dataset(rectified_image_path_,tile_px_x_,tile_px_y_,ring_N_,ring_radius_,ring_sigma_,ddir,csv,ring_path,sw,sh,err);
-            const auto t_rg1 = std::chrono::steady_clock::now();
-            last_ring_generation_ms_ = std::chrono::duration<double,std::milli>(t_rg1-t_rg0).count();
+            preconditioned_source_path_ = chosen.preconditioned_source_path;
+            source_object_type_detected_ = chosen.object_type_detected;
+            source_bbox_string_ = std::to_string(chosen.bbox_x0) + ":" + std::to_string(chosen.bbox_y0) + ":" + std::to_string(chosen.bbox_x1) + ":" + std::to_string(chosen.bbox_y1);
+            source_fill_fraction_used_ = chosen.fill_fraction_used;
+            source_margin_fraction_before_ = chosen.source_margin_fraction_before;
+            source_margin_fraction_ = chosen.margin_fraction;
+            source_truncation_suspected_ = chosen.source_truncation_suspected;
+            used_raw_fallback_for_preconditioning_ = chosen.used_raw_fallback_for_preconditioning;
+            source_clipping_guard_triggered_ = chosen.clipping_guard_triggered;
+            detected_planet_center_x_ = chosen.detected_planet_center_x;
+            detected_planet_center_y_ = chosen.detected_planet_center_y;
+            detected_planet_radius_px_ = chosen.detected_planet_radius_px;
+            preconditioning_method_ = chosen.method;
+            pending_events_.push_back(PayloadEvent{"source_preconditioned", "info", "Source preconditioning completed", chosen.object_type_detected});
+            pending_events_.push_back(PayloadEvent{"source_bbox", "info", "Source bbox detected", source_bbox_string_});
+            pending_events_.push_back(PayloadEvent{"source_fill_fraction", "info", "Source fill fraction selected", std::to_string(source_fill_fraction_used_)});
+            pending_events_.push_back(PayloadEvent{"source_margin_fraction_before", "info", "Source margin fraction before preconditioning", std::to_string(source_margin_fraction_before_)});
+            pending_events_.push_back(PayloadEvent{"source_margin_fraction", "info", "Source margin fraction after preconditioning", std::to_string(source_margin_fraction_)});
+            pending_events_.push_back(PayloadEvent{"source_detected_planet_center", "info", "Detected planet center x:y", std::to_string(detected_planet_center_x_) + ":" + std::to_string(detected_planet_center_y_)});
+            pending_events_.push_back(PayloadEvent{"source_detected_planet_radius_px", "info", "Detected planet radius px", std::to_string(detected_planet_radius_px_)});
+            if (source_truncation_suspected_) {
+              pending_events_.push_back(PayloadEvent{"source_truncation_suspected", "warn", "Source appears truncated before canonicalization", std::to_string(source_margin_fraction_before_)});
+            }
+            if (used_raw_fallback_for_preconditioning_) {
+              pending_events_.push_back(PayloadEvent{"used_raw_fallback_for_preconditioning", "warn", "Used raw capture fallback for preconditioning", raw_capture_path_});
+            }
+            if (source_clipping_guard_triggered_) {
+              pending_events_.push_back(PayloadEvent{"source_clipping_guard_triggered", "warn", "Source clipping guard triggered", std::to_string(source_margin_fraction_)});
+            }
+
+            if (reconstruction_mode_ == "legacy_tiles") {
+              const auto t_rg0 = std::chrono::steady_clock::now();
+              ok = generate_payload_dataset(preconditioned_source_path_, tile_px_x_, tile_px_y_, ring_N_, ring_radius_, ring_sigma_, ddir, csv, ring_path, sw, sh, err);
+              const auto t_rg1 = std::chrono::steady_clock::now();
+              last_ring_generation_ms_ = std::chrono::duration<double,std::milli>(t_rg1-t_rg0).count();
+              pending_events_.push_back(PayloadEvent{"ring_observation_skipped", "info", "Legacy tile reconstruction mode enabled", ""});
+            } else {
+              const auto t_rg0 = std::chrono::steady_clock::now();
+              ok = generate_sgl_observation_dataset(preconditioned_source_path_, ddir, obs_cfg_, ring_summary_, csv, sw, sh, err);
+              const auto t_rg1 = std::chrono::steady_clock::now();
+              last_ring_generation_ms_ = std::chrono::duration<double,std::milli>(t_rg1-t_rg0).count();
+              ring_path = ring_summary_.ring_preview_path;
+              pending_events_.push_back(PayloadEvent{"ring_observation_skipped", "info", "Image-file/full-image path uses synthetic SGL observations", ""});
+              pending_events_.push_back(PayloadEvent{"annulus_generated", "info", "Annulus/unwrapped observation sequence generated", ring_summary_.annulus_bin_path});
+              pending_events_.push_back(PayloadEvent{"preconditioning_timing", "info", "Preconditioning runtime (ms)", std::to_string(std::chrono::duration<double,std::milli>(t_pre1-t_pre0).count())});
+            }
           }
         }
       }

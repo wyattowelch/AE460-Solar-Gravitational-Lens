@@ -1,2 +1,0 @@
-/usr/bin/ar qc libsgl_jetson_lib.a CMakeFiles/sgl_jetson_lib.dir/jetson_processing/processor.cpp.o
-/usr/bin/ranlib libsgl_jetson_lib.a

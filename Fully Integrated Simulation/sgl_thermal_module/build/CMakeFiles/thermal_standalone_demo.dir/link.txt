@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/thermal_standalone_demo.dir/examples/standalone_demo.cpp.o -o thermal_standalone_demo  libsgl_thermal_module.a 

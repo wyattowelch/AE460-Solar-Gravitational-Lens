@@ -1,6 +1,0 @@
-/home/bunta/sgl/sgl_eps_module/build/CMakeFiles/sgl_eps_module.dir
-/home/bunta/sgl/sgl_eps_module/build/CMakeFiles/eps_standalone_demo.dir
-/home/bunta/sgl/sgl_eps_module/build/CMakeFiles/test_eps.dir
-/home/bunta/sgl/sgl_eps_module/build/CMakeFiles/test.dir
-/home/bunta/sgl/sgl_eps_module/build/CMakeFiles/edit_cache.dir
-/home/bunta/sgl/sgl_eps_module/build/CMakeFiles/rebuild_cache.dir

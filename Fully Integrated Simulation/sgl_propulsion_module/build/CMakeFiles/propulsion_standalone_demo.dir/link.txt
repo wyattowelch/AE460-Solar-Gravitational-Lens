@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/propulsion_standalone_demo.dir/examples/standalone_demo.cpp.o -o propulsion_standalone_demo  libsgl_propulsion_module.a 

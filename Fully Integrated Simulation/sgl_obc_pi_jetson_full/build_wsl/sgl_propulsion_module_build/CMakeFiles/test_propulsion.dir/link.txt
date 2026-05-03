@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/test_propulsion.dir/tests/test_propulsion.cpp.o -o test_propulsion  libsgl_propulsion_module.a 

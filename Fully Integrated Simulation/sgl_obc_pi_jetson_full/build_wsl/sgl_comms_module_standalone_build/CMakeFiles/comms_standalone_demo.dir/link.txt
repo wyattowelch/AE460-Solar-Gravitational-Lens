@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/comms_standalone_demo.dir/examples/standalone_demo.cpp.o -o comms_standalone_demo  libsgl_comms_module.a 

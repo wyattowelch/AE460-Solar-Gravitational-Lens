@@ -1,3 +1,0 @@
-profile_name,stage_index,out_n,observations_used,new_observations_added,roi_count,coarse_runtime_ms,refine_runtime_ms,roi_selection_ms,total_stage_runtime_ms,coarse_path,refined_path
-"default",0,128,1,1,8,0.745423,0.546166,0.05274,1.29159,"/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/test_out_propulsion_event/products/dataset_0_s0_coarse_128.ppm","/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/test_out_propulsion_event/products/dataset_0_s0_refined_128.ppm"
-"default",1,256,1,0,10,0.954463,1.65251,0.061329,2.60697,"/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/test_out_propulsion_event/products/dataset_0_s1_coarse_256.ppm","/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/test_out_propulsion_event/products/dataset_0_s1_refined_256.ppm"

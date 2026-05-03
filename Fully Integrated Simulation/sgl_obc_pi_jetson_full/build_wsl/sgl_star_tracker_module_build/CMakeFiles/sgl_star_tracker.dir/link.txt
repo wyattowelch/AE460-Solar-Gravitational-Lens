@@ -1,2 +1,0 @@
-/usr/bin/ar qc libsgl_star_tracker.a CMakeFiles/sgl_star_tracker.dir/src/quaternion.cpp.o CMakeFiles/sgl_star_tracker.dir/src/star_tracker_sim.cpp.o CMakeFiles/sgl_star_tracker.dir/src/gyro_sim.cpp.o CMakeFiles/sgl_star_tracker.dir/src/attitude_filter.cpp.o CMakeFiles/sgl_star_tracker.dir/src/adcs_controller.cpp.o CMakeFiles/sgl_star_tracker.dir/src/reaction_wheel_array.cpp.o CMakeFiles/sgl_star_tracker.dir/src/adcs_system.cpp.o
-/usr/bin/ranlib libsgl_star_tracker.a

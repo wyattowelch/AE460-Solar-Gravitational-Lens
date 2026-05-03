@@ -3,7 +3,9 @@
 #include <csignal>
 #include <filesystem>
 #include <iostream>
+#include <omp.h>
 #include <string>
+#include <thread>
 
 #include "../common/config.hpp"
 #include "../common/logger.hpp"
@@ -31,6 +33,12 @@ int main(int argc, char** argv) {
   if (!sgl::load_config_json(cfgPath, C, err)) {
     std::cerr << err << "\n";
     return 1;
+  }
+
+  if (C.profiling_mode) {
+    omp_set_dynamic(0);
+    const int hw_threads = std::max(1u, std::thread::hardware_concurrency());
+    omp_set_num_threads(hw_threads);
   }
 
   fs::create_directories(fs::path(C.out_dir) / "logs");

@@ -65,8 +65,12 @@ rows = list(csv.DictReader(open(manifest, newline="")))
 if not rows:
     raise SystemExit("manifest empty")
 
-required = {128, 256, 512}
-by_kind = {"coarse": set(), "refined": set()}
+required = {
+    "recon_base": {128},
+    "recon_upscaled": {256, 512},
+    "recon_refined": {256, 512},
+}
+by_kind = {k: set() for k in required}
 for r in rows:
     try:
         n = int(r.get("out_n", "0"))
@@ -81,9 +85,8 @@ for r in rows:
     if not (os.path.exists(p) or os.path.exists(os.path.join(os.getcwd(), p))):
         raise SystemExit(f"manifest path missing: {p}")
 
-for kind in ("coarse", "refined"):
-    missing = sorted(required - by_kind[kind])
+for kind, needed in required.items():
+    missing = sorted(needed - by_kind[kind])
     if missing:
         raise SystemExit(f"{kind} missing progressive outputs: {missing}")
 PY
-

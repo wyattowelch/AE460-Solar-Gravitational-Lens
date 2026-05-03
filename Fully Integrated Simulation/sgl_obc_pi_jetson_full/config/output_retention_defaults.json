@@ -1,0 +1,15 @@
+{
+  "outputs_retention_enabled": true,
+  "outputs_keep_lightweight_runs": 10,
+  "outputs_keep_full_runs": 3,
+  "outputs_max_total_gb": 0,
+  "outputs_prune_raw_ppm": true,
+  "outputs_prune_ring_frames": true,
+  "outputs_prune_annulus_dumps": true,
+  "outputs_preserve_marked_runs": true,
+  "outputs_retention_include_out_profile": true,
+  "outputs_retention_include_working_outs": false,
+  "min_free_disk_gb_before_run": 0,
+  "warn_free_disk_gb": 25,
+  "fail_if_disk_below_gb": 10
+}

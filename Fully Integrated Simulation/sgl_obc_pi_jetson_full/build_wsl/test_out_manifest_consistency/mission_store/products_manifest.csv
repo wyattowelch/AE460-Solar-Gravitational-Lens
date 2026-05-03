@@ -1,7 +1,0 @@
-cycle,dataset_id,stage,kind,out_n,path,bytes,roi_count,roi_score_mean,status
-2,"dataset_0",0,"coarse",128,"test_out_manifest_consistency/products/dataset_0_s0_coarse_128.ppm",49167,6,0.886431,"coarse complete (cpu)"
-2,"dataset_0",0,"refined",128,"test_out_manifest_consistency/products/dataset_0_s0_refined_128.ppm",49167,6,0.886431,"refine complete (cpu)"
-7,"dataset_0",1,"coarse",256,"test_out_manifest_consistency/products/dataset_0_s1_coarse_256.ppm",196623,8,1.47,"coarse complete (cpu)"
-7,"dataset_0",1,"refined",256,"test_out_manifest_consistency/products/dataset_0_s1_refined_256.ppm",196623,8,1.47,"refine complete (cpu)"
-8,"dataset_0",2,"coarse",512,"test_out_manifest_consistency/products/dataset_0_s2_coarse_512.ppm",786447,10,1.45721,"coarse complete (cpu)"
-8,"dataset_0",2,"refined",512,"test_out_manifest_consistency/products/dataset_0_s2_refined_512.ppm",786447,10,1.45721,"refine complete (cpu)"

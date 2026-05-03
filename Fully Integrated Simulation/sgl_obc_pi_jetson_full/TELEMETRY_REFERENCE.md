@@ -138,7 +138,7 @@ Columns:
 - `cycle`: cycle when product was recorded
 - `dataset_id`: dataset identifier
 - `stage`: progressive stage index
-- `kind`: `coarse` or `refined`
+- `kind`: product type. Current image-file/annulus runs use `recon_base`, `recon_upscaled`, and `recon_refined`; legacy/debug paths may still emit `coarse` and `refined`.
 - `out_n`: output resolution for stage
 - `path`: product path
 - `bytes`: output product size (bytes)
@@ -156,7 +156,7 @@ Columns:
 - `dataset_id`: dataset identifier
 - `priority`: queue priority (lower number is higher priority in current convention)
 - `bits`: estimated bit cost for downlink
-- `kind`: product kind (`coarse`/`refined`)
+- `kind`: product kind, matching manifest product semantics.
 - `path`: artifact path
 - `status`: queue status (currently `QUEUED`)
 

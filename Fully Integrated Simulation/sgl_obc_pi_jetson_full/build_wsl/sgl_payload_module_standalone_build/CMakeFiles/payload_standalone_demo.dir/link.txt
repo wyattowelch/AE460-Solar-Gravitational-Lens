@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/payload_standalone_demo.dir/examples/standalone_demo.cpp.o -o payload_standalone_demo  libsgl_payload_module.a 

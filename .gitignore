@@ -1,0 +1,41 @@
+# SGL local/private files
+.codex
+.codex/
+.agents/
+**/.codex
+**/.codex/
+**/.agents/
+
+# Class/PDR context files kept local only
+*.pptx
+*.pdf
+sgl_code_docs_bundle_*.tar.gz
+
+# Generated SGL outputs/builds
+outputs/
+**/outputs/
+out/
+out_*/
+**/out/
+**/out_*/
+out_profile/
+**/out_profile/
+build/
+build_wsl/
+**/build/
+**/build_wsl/
+
+# Local Python/env/cache
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.log
+*.core
+core
+
+# OS/editor
+.DS_Store
+Thumbs.db

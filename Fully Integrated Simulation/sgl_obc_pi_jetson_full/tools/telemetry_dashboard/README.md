@@ -1,81 +1,75 @@
 # Telemetry Dashboard (Read-only)
 
-This dashboard only reads/tails Pi telemetry CSV output and does not control the simulation.
+This dashboard is read-only and never sends spacecraft control commands.
 
-## 1. Run Local Simulation
+## Launch Modes
 
-From `sgl_obc_pi_jetson_full`:
+Packaged run review (recommended):
 
 ```bash
-./scripts/run_local_demo.sh config/local_no_tcp.json
+./scripts/run_dashboard.sh outputs/latest 200
+# or
+python3 tools/telemetry_dashboard/dashboard.py --run-dir outputs/latest --refresh-ms 1000
 ```
 
-## 2. Run Dashboard Pointing to Telemetry CSV
+Live working-output mode:
+
+```bash
+./scripts/run_dashboard.sh config/image_file_demo.json 200
+# or
+python3 tools/telemetry_dashboard/dashboard.py --telemetry out_image_file/mission_store/telemetry_cycles.csv --refresh-ms 200
+```
+
+## Tabs
+
+- `Overview`: run name/config summary, completion status (`complete/partial/failed/running`), cycle, scheduler mode, compute budget, bus/source power, Jetson/payload state, downlink backlog, latest event.
+- `Metrics/Subsystem`: checkbox overlay plots grouped by ADCS, EPS/Power, Thermal, Propulsion, COMMS, Payload, Scheduler, Jetson, Downlink-related metrics.
+- `Events`: filter/search by subsystem token and warning/error severity.
+- `Image Pipeline`: raw/rectified/preconditioned/ring previews and progressive outputs (`128 base`, `256/512/1024/2048 upscaled+refined` when present). Missing stages show `MISSING / NOT COMPLETED`.
+- `Quality/Profile`: reconstruction quality (NMAE/MSE), per-stage timing, observations, ROI counts.
+- `Downlink`: `products_manifest` and `downlink_queue` views plus counts.
+
+## Demo Story Clarification
+
+For `image_file` / `pi_camera_demo` modes, camera/image capture is a demo stand-in. The captured/rectified/preconditioned source image is used as ideal truth to generate synthetic SGL observations. In mission reality, the spacecraft would measure Einstein-ring data directly.
+
+## Scenario Guidance (startup configs, not dashboard controls)
+
+- `nominal_demo`: `config/local_no_tcp.json`
+- `full_2048_reconstruction_demo`: `config/profile_progressive_2048_force_complete_unthrottled.json`
+- `low_power_throttle_demo`: lower `power_cap_W` or raise subsystem loads in a copied config
+- `propulsion_burn_demo`: increase propulsion activity config parameters in a copied config
+- `thermal_heater_demo`: use colder thermal start/setpoint in a copied config
+- `comms_backlog_demo`: increase payload cadence and/or reduce comms downlink throughput in a copied config
+
+## Dependencies
 
 ```bash
 python3 -m pip install -r tools/telemetry_dashboard/requirements.txt
-python3 tools/telemetry_dashboard/dashboard.py --telemetry out_local/mission_store/telemetry_cycles.csv --events out_local/mission_store/events.csv --manifest out_local/mission_store/products_manifest.csv --refresh-ms 200
 ```
 
-## 3. Groups Shown
+If dependencies are missing, `scripts/run_dashboard.sh` prints:
 
-- `Power/EPS`: source/bus/load/budget/scheduler.
-- `ADCS`: ADCS and wheel power, truth/estimated pointing errors, tracker confidence/valid/stars.
-- `Thermal`: thermal power/mode/heater/temp.
-- `Propulsion`: propulsion power/mode/active/thrust.
-- `Payload`: payload power/mode/activity/dataset lifecycle fields.
-- `COMMS`: comms power/mode/backlog queue.
-- `Jetson/Processing`: Jetson power/mode/job and processing queue/ROI counters.
+`Missing dashboard dependencies. Run: python3 -m pip install -r tools/telemetry_dashboard/requirements.txt`
 
-Mode/string fields are shown in a live status table. Numeric metrics are plotted and toggleable via checkboxes.
-Autonomous events are shown in a live event table and as optional vertical markers on plots.
+## WSL Note
 
-## 4. Image Preview Panel
-
-The dashboard includes a read-only image preview panel that auto-refreshes during runtime.
-
-Selectable preview sources:
-
-- `Raw Capture`: camera/image-file frame used for payload ingest
-- `Rectified`: aligned/corrected target image
-- `Ring Preview`: payload dataset/ring preview artifact when present
-- `Coarse`: latest coarse reconstruction product (from manifest)
-- `Refined`: latest refined product (from manifest)
-
-The panel discovers paths from telemetry (`raw_capture_path`, `rectified_image_path`, `dataset_id`) and `products_manifest.csv`.
-Missing files are handled gracefully.
-
-## 5. Demo Modes with Physical Input Path
-
-Image file demo:
-
-```bash
-./scripts/run_local_demo.sh config/image_file_demo.json
-python3 tools/telemetry_dashboard/dashboard.py --telemetry out_image_file/mission_store/telemetry_cycles.csv --events out_image_file/mission_store/events.csv --manifest out_image_file/mission_store/products_manifest.csv --refresh-ms 200
-```
-
-Pi camera demo (falls back to source image if camera is unavailable):
-
-```bash
-./scripts/run_local_demo.sh config/pi_camera_demo.json
-python3 tools/telemetry_dashboard/dashboard.py --telemetry out_camera_demo/mission_store/telemetry_cycles.csv --events out_camera_demo/mission_store/events.csv --manifest out_camera_demo/mission_store/products_manifest.csv --refresh-ms 200
-```
-
-## 6. Read-only Scope
-
-This is a demo visualization only. It does not send commands to the simulation.
+Dashboard requires a GUI/display server (X/Wayland forwarding). Headless test mode still works without display.
 
 ## Smoke Test (Headless)
-
-No display server required:
 
 ```bash
 python3 -m py_compile tools/telemetry_dashboard/dashboard.py tools/telemetry_dashboard/core.py
 PYTHONPATH=tools/telemetry_dashboard python3 -m unittest tools/telemetry_dashboard/tests/test_core_smoke.py
 ```
 
-## Notes
 
-- Update cadence defaults to 200 ms (recommended range: 100-250 ms).
-- The dashboard auto-detects available CSV columns and tolerates appended/new fields.
-- It does not depend on strict CSV column ordering.
+Stop stale dashboard processes:
+```bash
+./scripts/stop_dashboard.sh
+```
+
+Check demo/dashboard processes:
+```bash
+./scripts/check_running_demo_processes.sh
+```

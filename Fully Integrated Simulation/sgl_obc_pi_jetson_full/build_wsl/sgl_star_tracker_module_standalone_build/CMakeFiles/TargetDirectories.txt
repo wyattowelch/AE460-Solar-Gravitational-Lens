@@ -1,6 +1,0 @@
-/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_star_tracker_module_standalone_build/CMakeFiles/sgl_star_tracker.dir
-/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_star_tracker_module_standalone_build/CMakeFiles/star_tracker_demo.dir
-/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_star_tracker_module_standalone_build/CMakeFiles/test_adcs_system.dir
-/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_star_tracker_module_standalone_build/CMakeFiles/test.dir
-/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_star_tracker_module_standalone_build/CMakeFiles/edit_cache.dir
-/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/sgl_star_tracker_module_standalone_build/CMakeFiles/rebuild_cache.dir

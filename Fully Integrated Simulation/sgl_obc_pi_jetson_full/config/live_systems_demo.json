@@ -50,20 +50,9 @@
   "job_result_timeout_ms": 12000,
   "host": "127.0.0.1",
   "port": 5500,
-  "sim_cycles": 80,
+  "sim_cycles": 180,
   "dt_s": 1.0,
   "source_image": "../bluemarble.ppm",
-  "out_dir": "out_image_file",
-  "jetson_scratch_dir": "out_image_file/jetson_scratch",
-  "outputs_retention_enabled": true,
-  "outputs_keep_lightweight_runs": 10,
-  "outputs_keep_full_runs": 3,
-  "outputs_max_total_gb": 0,
-  "outputs_prune_raw_ppm": true,
-  "outputs_prune_ring_frames": true,
-  "outputs_prune_annulus_dumps": true,
-  "outputs_preserve_marked_runs": true,
-  "min_free_disk_gb_before_run": 0,
-  "warn_free_disk_gb": 25,
-  "fail_if_disk_below_gb": 10
+  "out_dir": "out_live_systems_demo",
+  "jetson_scratch_dir": "out_live_systems_demo/jetson_scratch"
 }

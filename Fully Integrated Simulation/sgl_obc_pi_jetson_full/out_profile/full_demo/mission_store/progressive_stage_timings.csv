@@ -1,4 +1,0 @@
-profile_name,stage_index,out_n,observations_used,new_observations_added,roi_count,coarse_runtime_ms,refine_runtime_ms,roi_selection_ms,total_stage_runtime_ms,coarse_path,refined_path
-"full_demo",0,128,8,8,8,171.88,1.2027,0.728891,173.083,"out_profile/full_demo/products/dataset_0_s0_coarse_128.ppm","out_profile/full_demo/products/dataset_0_s0_refined_128.ppm"
-"full_demo",1,256,32,24,10,93.2928,28.0374,2.6172,121.33,"out_profile/full_demo/products/dataset_0_s1_coarse_256.ppm","out_profile/full_demo/products/dataset_0_s1_refined_256.ppm"
-"full_demo",2,512,96,64,12,195.07,254.937,8.67461,450.008,"out_profile/full_demo/products/dataset_0_s2_coarse_512.ppm","out_profile/full_demo/products/dataset_0_s2_refined_512.ppm"

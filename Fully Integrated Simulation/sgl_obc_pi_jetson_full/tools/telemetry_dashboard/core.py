@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import csv
+import json
 import os
 from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
@@ -100,6 +101,18 @@ class ImagePreviewPaths:
     refined: str | None
 
 
+@dataclass(frozen=True)
+class RunSummary:
+    run_dir: str
+    run_name: str
+    run_status: str
+    completion_reason: str
+    requested_stages: Tuple[int, ...]
+    completed_stages: Tuple[int, ...]
+    missing_required_outputs: Tuple[str, ...]
+    missing_optional_outputs: Tuple[str, ...]
+
+
 
 def _resolve(candidates: Iterable[str], fields: set[str]) -> str | None:
     for c in candidates:
@@ -187,9 +200,9 @@ def _latest_manifest_products(manifest_path: str, telemetry_path: str) -> Dict[s
         p = resolve_image_path(r.get("path", ""), telemetry_path)
         if not p:
             continue
-        if kind == "coarse" and "coarse" not in out:
+        if kind in ("coarse", "recon_base", "recon_upscaled") and "coarse" not in out:
             out["coarse"] = p
-        elif kind == "refined" and "refined" not in out:
+        elif kind in ("refined", "recon_refined") and "refined" not in out:
             out["refined"] = p
         if "coarse" in out and "refined" in out:
             break
@@ -280,4 +293,107 @@ def load_event_records(event_path: str, max_events: int = 500) -> List[EventReco
                 value=str(r.get("value", "")).strip().strip('"'),
             )
         )
+    return out
+
+
+def resolve_run_paths(run_or_telemetry: str) -> Dict[str, str]:
+    p = os.path.abspath(run_or_telemetry)
+    if os.path.isdir(p):
+        csv_dir = os.path.join(p, "csv")
+        if os.path.isdir(csv_dir):
+            return {
+                "run_dir": p,
+                "telemetry": os.path.join(csv_dir, "telemetry_cycles.csv"),
+                "events": os.path.join(csv_dir, "events.csv"),
+                "manifest": os.path.join(csv_dir, "products_manifest.csv"),
+                "downlink": os.path.join(csv_dir, "downlink_queue.csv"),
+                "quality": os.path.join(csv_dir, "reconstruction_quality.csv"),
+                "stage_timings": os.path.join(csv_dir, "progressive_stage_timings.csv"),
+                "run_metadata": os.path.join(p, "run_metadata.json"),
+            }
+        ms_dir = os.path.join(p, "mission_store")
+        if os.path.isdir(ms_dir):
+            return {
+                "run_dir": p,
+                "telemetry": os.path.join(ms_dir, "telemetry_cycles.csv"),
+                "events": os.path.join(ms_dir, "events.csv"),
+                "manifest": os.path.join(ms_dir, "products_manifest.csv"),
+                "downlink": os.path.join(ms_dir, "downlink_queue.csv"),
+                "quality": os.path.join(ms_dir, "reconstruction_quality.csv"),
+                "stage_timings": os.path.join(ms_dir, "progressive_stage_timings.csv"),
+                "run_metadata": os.path.join(p, "run_metadata.json"),
+            }
+    root = os.path.dirname(p)
+    run_dir = os.path.dirname(root)
+    return {
+        "run_dir": run_dir,
+        "telemetry": p,
+        "events": os.path.join(root, "events.csv"),
+        "manifest": os.path.join(root, "products_manifest.csv"),
+        "downlink": os.path.join(root, "downlink_queue.csv"),
+        "quality": os.path.join(root, "reconstruction_quality.csv"),
+        "stage_timings": os.path.join(root, "progressive_stage_timings.csv"),
+        "run_metadata": os.path.join(run_dir, "run_metadata.json"),
+    }
+
+
+def load_run_summary(run_metadata_path: str, run_dir: str) -> RunSummary:
+    meta: Dict[str, object] = {}
+    if run_metadata_path and os.path.exists(run_metadata_path):
+        try:
+            with open(run_metadata_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+        except Exception:
+            meta = {}
+
+    def _as_int_tuple(v: object) -> Tuple[int, ...]:
+        if not isinstance(v, list):
+            return tuple()
+        out: List[int] = []
+        for x in v:
+            try:
+                out.append(int(x))
+            except Exception:
+                continue
+        return tuple(out)
+
+    def _as_str_tuple(v: object) -> Tuple[str, ...]:
+        if not isinstance(v, list):
+            return tuple()
+        return tuple(str(x) for x in v)
+
+    return RunSummary(
+        run_dir=run_dir,
+        run_name=os.path.basename(run_dir.rstrip("/")) if run_dir else "",
+        run_status=str(meta.get("run_completion_status", "running")),
+        completion_reason=str(meta.get("completion_reason", "")),
+        requested_stages=_as_int_tuple(meta.get("requested_stages")),
+        completed_stages=_as_int_tuple(meta.get("completed_stages")),
+        missing_required_outputs=_as_str_tuple(meta.get("missing_required_outputs")),
+        missing_optional_outputs=_as_str_tuple(meta.get("missing_optional_outputs")),
+    )
+
+
+def load_csv_rows(path: str) -> List[Dict[str, str]]:
+    if not path or not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", newline="", encoding="utf-8") as f:
+            return list(csv.DictReader(f))
+    except Exception:
+        return []
+
+
+def filter_events(events: Sequence[EventRecord], token: str) -> List[EventRecord]:
+    t = (token or "").strip().lower()
+    if not t or t == "all":
+        return list(events)
+    out: List[EventRecord] = []
+    for e in events:
+        hay = f"{e.event_type} {e.severity} {e.message}".lower()
+        if t in ("warning/error", "warn", "error"):
+            if e.severity.lower() in ("warn", "error"):
+                out.append(e)
+        elif t in hay:
+            out.append(e)
     return out

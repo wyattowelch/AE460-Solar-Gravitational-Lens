@@ -9,6 +9,146 @@ This codebase implements a local-machine prototype of a distributed spacecraft s
 - [DEMO_WALKTHROUGH.md](DEMO_WALKTHROUGH.md): step-by-step demo script and cause/effect story.
 - [TELEMETRY_REFERENCE.md](TELEMETRY_REFERENCE.md): telemetry/events/manifest/downlink schemas and subsystem field ownership.
 
+## Quick Start
+
+Most users can run this minimal sequence end-to-end:
+
+```bash
+sudo apt update
+sudo apt install -y build-essential cmake python3 python3-pip python3-venv ffmpeg fswebcam
+
+./scripts/clean_outputs.sh
+./scripts/build_all.sh
+ctest --test-dir build_wsl --output-on-failure
+./scripts/run_local_demo.sh config/image_file_demo.json
+./scripts/profile_progressive.sh
+```
+
+### A) WSL Ubuntu (first-time setup)
+
+```bash
+sudo apt update
+sudo apt install -y build-essential cmake python3 python3-pip python3-venv
+```
+
+Optional camera/demo tools:
+
+```bash
+sudo apt install -y ffmpeg fswebcam
+```
+
+For Raspberry Pi camera bring-up later (on Pi OS / Ubuntu Pi image):
+
+```bash
+sudo apt install -y rpicam-apps
+```
+
+(`libcamera` tools may be used instead on some OS images.)
+
+### B) Native Linux Ubuntu/Debian (first-time setup)
+
+```bash
+sudo apt update
+sudo apt install -y build-essential cmake python3 python3-pip python3-venv
+```
+
+Optional camera/demo tools:
+
+```bash
+sudo apt install -y ffmpeg fswebcam
+```
+
+### Dashboard Python deps (optional unless using GUI)
+
+```bash
+python3 -m pip install -r tools/telemetry_dashboard/requirements.txt
+```
+
+Dashboard is optional and not required for core simulation or tests. Dashboard requires a GUI/display server.
+
+If pip reports an externally-managed environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r tools/telemetry_dashboard/requirements.txt
+```
+
+## Build and Test
+
+```bash
+./scripts/clean_outputs.sh
+./scripts/build_all.sh
+ctest --test-dir build_wsl --output-on-failure
+```
+
+## Run Demos
+
+```bash
+./scripts/run_local_demo.sh config/local_no_tcp.json
+./scripts/run_local_demo.sh config/image_file_demo.json
+./scripts/run_local_demo.sh config/pi_camera_demo.json
+```
+
+## Run Progressive Profiling
+
+```bash
+./scripts/profile_progressive.sh
+```
+
+Outputs:
+- `out_profile/progressive_profile_summary.csv`
+- `out_profile/progressive_stage_timings.csv`
+- packaged run bundle: `outputs/<timestamp>_<case_name>/`
+- latest packaged bundle symlink: `outputs/latest`
+
+Packaged run layout:
+- `run_metadata.json`
+- `config/original_config.json`, `config/effective_config.json`
+- `csv/telemetry_cycles.csv`, `csv/events.csv`, `csv/downlink_queue.csv`, `csv/products_manifest.csv`, `csv/reconstruction_quality.csv`, `csv/progressive_stage_timings.csv`, plus profile CSVs when present
+- `images/datasets/...` (lightweight PNG inspection artifacts)
+- `images/products/...` (progressive/base/upscaled/refined PNGs and contact sheet)
+- `heavy/raw_ppm`, `heavy/ring_frames`, `heavy/annulus`, `heavy/datasets` (large artifacts)
+- `subsystems/<name>/telemetry.csv` and `subsystems/<name>/events.csv` filtered views for `adcs`, `eps`, `thermal`, `propulsion`, `comms`, `payload`, `scheduler`, `jetson`, `obc`
+
+## Run Dashboard
+
+Script helper:
+
+```bash
+./scripts/run_dashboard.sh outputs/latest 200
+```
+
+Direct command:
+
+```bash
+python3 tools/telemetry_dashboard/dashboard.py \
+  --run-dir outputs/latest \
+  --refresh-ms 200
+```
+
+## Standalone Tests and Smoke Checks
+
+List tests:
+
+```bash
+ctest --test-dir build_wsl -N
+```
+
+Run targeted tests:
+
+```bash
+ctest --test-dir build_wsl -R test_ring_observation --output-on-failure
+ctest --test-dir build_wsl -R test_local_processing --output-on-failure
+```
+
+Dashboard smoke checks:
+
+```bash
+python3 -m py_compile tools/telemetry_dashboard/core.py tools/telemetry_dashboard/dashboard.py
+PYTHONPATH=tools/telemetry_dashboard python3 -m unittest tools/telemetry_dashboard/tests/test_core_smoke.py
+```
+
 ## Nodes
 - **Raspberry Pi OBC (`sgl_pi_flight`)**
   - master command/data handling
@@ -19,7 +159,7 @@ This codebase implements a local-machine prototype of a distributed spacecraft s
   - FDIR hooks
   - Jetson job dispatch
 - **Jetson Orin Nano service (`sgl_jetson_service`)**
-  - coarse reconstruction
+  - worker-side reconstruction jobs
   - adaptive ROI refinement
   - progressive staged outputs (`128 -> 256 -> 512 -> ...`)
   - image product generation
@@ -31,15 +171,32 @@ This codebase implements a local-machine prototype of a distributed spacecraft s
 - Pi owns persistent mission data.
 - Compute is throttled by a live power budget derived from subsystem activity.
 - Payload data is generated synthetically from a source image.
-- Image processing uses staged reconstruction: coarse map first, then adaptive ROI refinement.
-- Progressive mode runs multiple stages; each stage refines only high-information ROIs and writes stage products.
+- Image processing uses staged reconstruction: a 128 base result, then explicit upscaled/refined pairs at each higher resolution.
+- Progressive mode writes `recon_base`, `recon_upscaled`, and `recon_refined` products so demos show what changed at each step.
 
 ## Build
+
+Project-standard build command:
+
+```bash
+./scripts/build_all.sh
+```
+
+`build_all.sh` creates and uses `build_wsl/` as the standard build output directory. Run tests with:
+
+```bash
+ctest --test-dir build_wsl --output-on-failure
+```
+
+Manual CMake build (advanced/optional):
+
 ```bash
 mkdir -p build && cd build
 cmake ..
 cmake --build . -j
 ```
+
+If you build manually, the repository scripts and docs still assume `build_wsl/` unless you adjust commands.
 
 ## Config Profiles
 
@@ -57,8 +214,49 @@ cmake --build . -j
 - `scripts/run_local_demo.sh [config_path]`: runs local no-TCP OBC simulation (defaults to `config/local_no_tcp.json`).
 - `scripts/run_tcp_jetson.sh [config_path]`: runs Jetson service in TCP mode (defaults to `config/tcp_localhost.json`).
 - `scripts/run_tcp_pi.sh [config_path]`: runs Pi flight in TCP mode (defaults to `config/tcp_localhost.json`).
-- `scripts/run_dashboard.sh [config_path] [refresh_ms]`: launches read-only dashboard for telemetry/events from the selected config output root.
+- `scripts/run_dashboard.sh [outputs/latest|config_path] [refresh_ms]`: launches read-only dashboard in packaged-run review mode or config-derived live mode.
 - `scripts/clean_outputs.sh`: removes common output directories (`out*` presets).
+- `scripts/package_run_outputs.sh --case-name <name> --source-out-root <out_dir> [--config-path <cfg>]`: packages one run into `outputs/<timestamp>_<case>/` using structured `config/csv/images/heavy/subsystems` layout and writes run metadata.
+- `scripts/cleanup_packaged_outputs.sh`: retention/cleanup controller (dry-run by default).
+
+## Output Retention and Disk Safety
+
+Default retention policy (automatic after packaging, unless disabled by config):
+- keep last `10` runs as lightweight records
+- keep last `3` runs with full heavy artifacts
+- runs older than full-retention window are pruned to lightweight data
+- runs older than lightweight window are deleted entirely
+- any run containing `.keep` or `KEEP_RUN` is preserved
+
+Config controls (per run config JSON):
+- `outputs_retention_enabled` (default `true`)
+- `outputs_keep_lightweight_runs` (default `10`)
+- `outputs_keep_full_runs` (default `3`)
+- `outputs_max_total_gb` (default `0`, disabled)
+- `outputs_prune_raw_ppm` (default `true`)
+- `outputs_prune_ring_frames` (default `true`)
+- `outputs_prune_annulus_dumps` (default `true`)
+- `outputs_preserve_marked_runs` (default `true`)
+- `outputs_retention_include_out_profile` (default `false`)
+- `outputs_retention_include_working_outs` (default `false`)
+- `min_free_disk_gb_before_run` (default `0`)
+- `warn_free_disk_gb` (default `25`)
+- `fail_if_disk_below_gb` (default `10` for high-fidelity/profile runs)
+
+Preserve an important packaged run:
+```bash
+touch outputs/<timestamp_case_name>/.keep
+```
+
+Dry-run cleanup (recommended first):
+```bash
+./scripts/cleanup_packaged_outputs.sh --dry-run --keep-lightweight-runs 10 --keep-full-runs 3 --prune-heavy --prune-raw-ppm --prune-ring-frames --prune-annulus --preserve-marked --include-out-profile
+```
+
+Apply cleanup:
+```bash
+./scripts/cleanup_packaged_outputs.sh --delete --keep-lightweight-runs 10 --keep-full-runs 3 --prune-heavy --prune-raw-ppm --prune-ring-frames --prune-annulus --preserve-marked --include-out-profile
+```
 
 ## Workflow 1: Local No-TCP Demo
 
@@ -73,7 +271,7 @@ cmake --build . -j
 3. Run dashboard (read-only):
 ```bash
 python3 -m pip install -r tools/telemetry_dashboard/requirements.txt
-./scripts/run_dashboard.sh config/local_no_tcp.json 200
+./scripts/run_dashboard.sh outputs/latest 1000
 ```
 4. For a clear demo, enable these plot groups:
 - `Power/EPS`: source/load/compute budget/scheduler mode
@@ -122,7 +320,7 @@ Dashboard image preview panel (read-only) can show latest:
 - raw capture
 - rectified image
 - ring preview/dataset input artifacts
-- coarse product
+- base/upscaled product
 - refined product
 
 ## Workflow 2: TCP Localhost Demo (Two Processes)
@@ -146,6 +344,8 @@ Then launch dashboard against TCP output:
 
 ## Workflow 3: Future Pi + Jetson Hardware Deployment
 
+- `build_wsl/` is the repository-standard build output directory. On Pi/Jetson, run `./scripts/build_all.sh` on each node and use that node's local `build_wsl/` binaries.
+
 - Pi node:
 ```bash
 ./build_wsl/sgl_pi_flight --config config/pi_hardware.json
@@ -165,7 +365,7 @@ Before deploying:
 After any sim run that generated telemetry:
 
 ```bash
-./scripts/run_dashboard.sh config/local_no_tcp.json 200
+./scripts/run_dashboard.sh outputs/latest 1000
 ```
 
 Use `config/tcp_localhost.json` or hardware profile paths as needed.
@@ -178,7 +378,13 @@ ctest --test-dir build_wsl --output-on-failure
 
 `test_tcp_mode` is included and validates two-process TCP Pi↔Jetson behavior. In restricted environments where localhost sockets are blocked, it reports `SKIP` and exits successfully.
 
-Outputs appear in `out/` relative to the process working directory.
+Common output roots used by current configs/scripts:
+- `out_local/`
+- `out_image_file/`
+- `out_camera_demo/`
+- `out_tcp/`
+- `out_profile/`
+- `outputs/` (packaged bundles with `outputs/latest` symlink)
 
 ## Persistent Pi-Owned Data
 - `out/mission_store/products_manifest.csv`: authoritative product manifest written by Pi.
@@ -192,7 +398,7 @@ The dashboard is under `tools/telemetry_dashboard/` and only reads telemetry (no
 
 ```bash
 python3 -m pip install -r tools/telemetry_dashboard/requirements.txt
-./scripts/run_dashboard.sh config/local_no_tcp.json 200
+./scripts/run_dashboard.sh outputs/latest 1000
 ```
 
 ## Progressive Profiling Sweep
@@ -213,10 +419,12 @@ Outputs:
 - `out_profile/progressive_profile_summary.csv`
 - `out_profile/progressive_stage_timings.csv`
 - per-profile outputs under `out_profile/<profile_name>/`
+- packaged per-run bundles under `outputs/<timestamp>_<case_name>/`
+- `outputs/latest` points to the most recent packaged run
 
 CSV interpretation:
 - summary CSV: total runtime, ring generation timing, reconstruction timing, ROI-selection timing, manifest/product counts.
-- stage CSV: per-stage observation counts, ROI count, coarse/refine runtime, total stage runtime, product paths.
+- stage CSV: per-stage observation counts, ROI count, base/upscale/refine runtime, total stage runtime, product paths.
 
 Recommended selection:
 - `fast_demo`: highest reliability / lowest runtime.
@@ -336,10 +544,43 @@ The module owns sensor/filter/controller/wheel/truth-loop behavior; OBC owns mis
 
 ## General Troubleshooting
 
+- Script permission denied:
+  - `chmod +x scripts/*.sh tests/*.sh`
+
 - Dashboard import failure (for example `ModuleNotFoundError: pyqtgraph`):
   - install dashboard requirements:
   - `python3 -m pip install -r tools/telemetry_dashboard/requirements.txt`
   - `scripts/run_dashboard.sh` now checks dependencies first and prints this command instead of a traceback.
+
+- Pip externally-managed environment:
+  - use a virtual environment:
+  - `python3 -m venv .venv`
+  - `source .venv/bin/activate`
+  - `python3 -m pip install -r tools/telemetry_dashboard/requirements.txt`
+
+- Camera not found:
+  - install optional capture tools: `sudo apt install -y ffmpeg fswebcam`
+  - Pi bring-up later: install `rpicam-apps` or libcamera tools on target OS.
+  - `pi_camera_demo` falls back to `source_image` and logs warning events.
+
+- No GUI in WSL:
+  - dashboard requires a display server/X forwarding.
+  - use non-GUI checks when headless:
+  - `python3 -m py_compile tools/telemetry_dashboard/core.py tools/telemetry_dashboard/dashboard.py`
+  - `PYTHONPATH=tools/telemetry_dashboard python3 -m unittest tools/telemetry_dashboard/tests/test_core_smoke.py`
+
+- Optional 1024 refined output missing in `full_demo`/`stress` profiling:
+  - this usually indicates scheduler/power/runtime limits, not a build crash.
+  - review `out_profile/progressive_profile_summary.csv` fields:
+  - `missing_optional_outputs`, `scheduler_throttle_count`, `scheduler_suspend_count`
+
+- Packaged outputs are large:
+  - inspect the latest run under `outputs/latest`
+  - preview cleanup with `./scripts/cleanup_packaged_outputs.sh --dry-run --keep-lightweight-runs 10 --keep-full-runs 3 --prune-heavy --prune-raw-ppm --prune-ring-frames --prune-annulus --include-out-profile`
+  - apply cleanup only when intended with `./scripts/cleanup_packaged_outputs.sh --delete --keep-lightweight-runs 10 --keep-full-runs 3 --prune-heavy --prune-raw-ppm --prune-ring-frames --prune-annulus --include-out-profile`
+
+- `ctest` build directory missing:
+  - run `./scripts/build_all.sh` first, then rerun `ctest --test-dir build_wsl --output-on-failure`.
 
 - Test portability:
   - runtime tests do not require `ripgrep` (`rg`) anymore.

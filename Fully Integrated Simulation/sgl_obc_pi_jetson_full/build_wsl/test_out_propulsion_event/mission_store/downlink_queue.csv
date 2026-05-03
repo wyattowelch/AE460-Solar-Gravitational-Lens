@@ -1,5 +1,0 @@
-cycle,dataset_id,priority,bits,kind,path,status
-3,"dataset_0",2,393336,"coarse","/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/test_out_propulsion_event/products/dataset_0_s0_coarse_128.ppm","QUEUED"
-10,"dataset_0",1,393336,"refined","/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/test_out_propulsion_event/products/dataset_0_s0_refined_128.ppm","QUEUED"
-11,"dataset_0",2,1572984,"coarse","/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/test_out_propulsion_event/products/dataset_0_s1_coarse_256.ppm","QUEUED"
-11,"dataset_0",3,1572984,"refined","/home/bunta/sgl/sgl_obc_pi_jetson_full/build_wsl/test_out_propulsion_event/products/dataset_0_s1_refined_256.ppm","QUEUED"

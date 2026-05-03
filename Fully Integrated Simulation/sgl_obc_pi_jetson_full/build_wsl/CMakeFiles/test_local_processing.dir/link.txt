@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/test_local_processing.dir/tests/test_local_processing.cpp.o -o test_local_processing  libsgl_common.a libsgl_jetson_lib.a libsgl_common.a /usr/lib/gcc/x86_64-linux-gnu/13/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a 

@@ -9,7 +9,11 @@ from core import (
     detect_default_manifest_path,
     detect_metric_plan,
     discover_image_preview_paths,
+    filter_events,
+    load_csv_rows,
     load_event_records,
+    load_run_summary,
+    resolve_run_paths,
 )
 
 
@@ -110,6 +114,39 @@ class TestCoreSmoke(unittest.TestCase):
             )
             self.assertEqual(previews2.raw_capture, raw)
             self.assertEqual(previews2.rectified, rect)
+
+    def test_run_dir_resolution_and_summary(self):
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = os.path.join(td, "outputs", "demo_run")
+            csv_dir = os.path.join(run_dir, "csv")
+            os.makedirs(csv_dir, exist_ok=True)
+            with open(os.path.join(csv_dir, "telemetry_cycles.csv"), "w") as f:
+                f.write("cycle,a\n0,1\n")
+            with open(os.path.join(run_dir, "run_metadata.json"), "w") as f:
+                f.write(
+                    '{"run_completion_status":"partial","completion_reason":"missing required outputs",'
+                    '"requested_stages":[128,256,512],"completed_stages":[128,256],'
+                    '"missing_required_outputs":["512:refined"],"missing_optional_outputs":[]}'
+                )
+
+            paths = resolve_run_paths(run_dir)
+            self.assertTrue(paths["telemetry"].endswith("csv/telemetry_cycles.csv"))
+            rows = load_csv_rows(paths["telemetry"])
+            self.assertEqual(len(rows), 1)
+            summary = load_run_summary(paths["run_metadata"], run_dir)
+            self.assertEqual(summary.run_status, "partial")
+            self.assertEqual(summary.completed_stages, (128, 256))
+            self.assertEqual(summary.missing_required_outputs, ("512:refined",))
+
+    def test_event_filter(self):
+        events = [
+            type("E", (), {"cycle": 1, "event_type": "adcs_correction_started", "severity": "info", "message": "ADCS correction started", "value": ""})(),
+            type("E", (), {"cycle": 2, "event_type": "compute_budget_low", "severity": "warn", "message": "budget low", "value": ""})(),
+        ]
+        out = filter_events(events, "adcs")
+        self.assertEqual(len(out), 1)
+        out2 = filter_events(events, "Warning/Error")
+        self.assertEqual(len(out2), 1)
 
 
 if __name__ == "__main__":

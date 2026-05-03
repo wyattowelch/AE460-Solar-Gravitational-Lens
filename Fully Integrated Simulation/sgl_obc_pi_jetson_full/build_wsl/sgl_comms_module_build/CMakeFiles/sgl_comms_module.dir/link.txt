@@ -1,2 +1,0 @@
-/usr/bin/ar qc libsgl_comms_module.a CMakeFiles/sgl_comms_module.dir/src/comms_module.cpp.o
-/usr/bin/ranlib libsgl_comms_module.a
