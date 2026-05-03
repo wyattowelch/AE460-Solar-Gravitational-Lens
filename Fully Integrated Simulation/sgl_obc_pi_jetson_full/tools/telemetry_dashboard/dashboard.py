@@ -5,6 +5,7 @@ import io
 import json
 import os
 import sys
+import time
 from collections import deque
 
 import pyqtgraph as pg
@@ -173,6 +174,8 @@ class TelemetryDashboard(QtWidgets.QWidget):
         self.stage_timings_path = paths["stage_timings"]
         self.run_metadata_path = paths.get("run_metadata", "")
         self.run_summary = load_run_summary(self.run_metadata_path, paths.get("run_dir", ""))
+        self.is_review_mode = os.path.isdir(os.path.join(paths.get("run_dir", ""), "csv"))
+        self.is_live_mode = not self.is_review_mode
 
         self.refresh_ms = refresh_ms
         self.max_points = max_points
@@ -203,6 +206,14 @@ class TelemetryDashboard(QtWidgets.QWidget):
         self.file_sig = {}
         self.tail_reader = CsvTailReader(self.telemetry_path)
         self.effective_cfg = self._load_effective_config()
+        self.playback_enabled = self._cfg_bool("live_playback_buffer_enabled", default=self.is_live_mode)
+        self.playback_cycle_period_ms = self._cfg_int("live_playback_cycle_period_ms", 180)
+        self.playback_lag_cycles = self._cfg_int("live_playback_lag_cycles", 5)
+        self.playback_catchup_multiplier = self._cfg_float("live_playback_catchup_multiplier", 2.0)
+        self.latest_data_cycle = -1
+        self.display_cycle = -1
+        self.last_telemetry_update_ts = time.monotonic()
+        self.last_playback_step_ts = time.monotonic()
 
         self._build_ui()
 
@@ -221,6 +232,29 @@ class TelemetryDashboard(QtWidgets.QWidget):
             except Exception:
                 return {}
         return {}
+
+    def _cfg_bool(self, key, default):
+        v = self.effective_cfg.get(key, default)
+        if isinstance(v, bool):
+            return v
+        s = str(v).strip().lower()
+        if s in ("1", "true", "yes", "on"):
+            return True
+        if s in ("0", "false", "no", "off"):
+            return False
+        return bool(default)
+
+    def _cfg_int(self, key, default):
+        try:
+            return int(self.effective_cfg.get(key, default))
+        except Exception:
+            return int(default)
+
+    def _cfg_float(self, key, default):
+        try:
+            return float(self.effective_cfg.get(key, default))
+        except Exception:
+            return float(default)
 
     def _file_changed(self, path):
         try:
@@ -262,6 +296,7 @@ class TelemetryDashboard(QtWidgets.QWidget):
 
         left = QtWidgets.QScrollArea()
         left.setWidgetResizable(True)
+        left.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
         self.controls_widget = QtWidgets.QWidget()
         self.controls_layout = QtWidgets.QVBoxLayout(self.controls_widget)
         left.setWidget(self.controls_widget)
@@ -298,13 +333,31 @@ class TelemetryDashboard(QtWidgets.QWidget):
         self.controls_layout.addLayout(btn_row)
 
         self.show_markers_cb = QtWidgets.QCheckBox("Show Event Markers")
-        self.show_markers_cb.setChecked(True)
-        self.show_markers_cb.stateChanged.connect(self._render_event_markers)
+        self.show_markers_cb.setChecked(False)
+        self.show_markers_cb.stateChanged.connect(self._on_marker_ui_changed)
         self.controls_layout.addWidget(self.show_markers_cb)
+        marker_row = QtWidgets.QHBoxLayout()
+        marker_row.addWidget(QtWidgets.QLabel("Marker Filter:"))
+        self.marker_filter = QtWidgets.QComboBox()
+        self.marker_filter.addItem("Warnings Only", "warnings")
+        self.marker_filter.addItem("Scheduler/Jetson", "scheduler_jetson")
+        self.marker_filter.addItem("Payload/Image", "payload_image")
+        self.marker_filter.addItem("ADCS/Thermal/Propulsion", "adcs_thermal_prop")
+        self.marker_filter.addItem("All", "all")
+        self.marker_filter.currentIndexChanged.connect(self._on_marker_ui_changed)
+        marker_row.addWidget(self.marker_filter, 1)
+        self.controls_layout.addLayout(marker_row)
+        self.marker_top_only_cb = QtWidgets.QCheckBox("Markers On Top Panel Only")
+        self.marker_top_only_cb.setChecked(True)
+        self.marker_top_only_cb.stateChanged.connect(self._on_marker_ui_changed)
+        self.controls_layout.addWidget(self.marker_top_only_cb)
 
         self.plot_scroll = QtWidgets.QScrollArea()
         self.plot_scroll.setWidgetResizable(True)
+        self.plot_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        self.plot_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
         self.plot_host = QtWidgets.QWidget()
+        self.plot_host.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.MinimumExpanding)
         self.plot_host_layout = QtWidgets.QVBoxLayout(self.plot_host)
         self.plot_scroll.setWidget(self.plot_host)
         for panel_name in PANEL_ORDER:
@@ -322,6 +375,7 @@ class TelemetryDashboard(QtWidgets.QWidget):
         self.plot_host_layout.addStretch(1)
         layout.addWidget(left, 0)
         layout.addWidget(self.plot_scroll, 1)
+        self._on_marker_ui_changed()
         self.tabs.addTab(tab, "Metrics/Subsystem")
 
     def _build_events_tab(self):
@@ -421,8 +475,8 @@ class TelemetryDashboard(QtWidgets.QWidget):
 
         self.plan = detect_metric_plan(fieldnames)
 
-        while self.controls_layout.count() > 4:
-            item = self.controls_layout.takeAt(4)
+        while self.controls_layout.count() > 6:
+            item = self.controls_layout.takeAt(6)
             w = item.widget()
             if w is not None:
                 w.deleteLater()
@@ -472,6 +526,7 @@ class TelemetryDashboard(QtWidgets.QWidget):
 
         self.controls_layout.addStretch(1)
         self._reset_default_view()
+        self._update_plot_host_min_height()
 
     def _panel_for_metric(self, group, key):
         if key in ("source_w", "noncompute_w", "compute_budget_w", "total_bus_load_w"):
@@ -497,6 +552,17 @@ class TelemetryDashboard(QtWidgets.QWidget):
             "payload_active", "dataset_ready", "jetson_mode", "processing_queue", "roi_count", "comms_backlog_bits",
         }
         return preferred
+
+    def _update_plot_host_min_height(self):
+        visible = [box for (box, _) in self.panel_plots.values() if box.isVisible()]
+        if not visible:
+            self.plot_host.setMinimumHeight(480)
+            return
+        spacing = self.plot_host_layout.spacing()
+        total = 24
+        for box in visible:
+            total += max(box.sizeHint().height(), 260) + spacing
+        self.plot_host.setMinimumHeight(total + 24)
 
     def _reset_default_view(self):
         default_keys = self._default_metric_keys()
@@ -526,7 +592,7 @@ class TelemetryDashboard(QtWidgets.QWidget):
         elif active == "__power_summary__":
             visible_panels = {"Power/EPS", "Subsystem Power Summary"}
         elif active == "__demo_default__":
-            visible_panels = {"Power/EPS", "ADCS", "Thermal/Propulsion", "Payload/Image", "Scheduler/Jetson", "COMMS/Downlink"}
+            visible_panels = {"Power/EPS", "Subsystem Power Summary", "ADCS", "Thermal/Propulsion", "Payload/Image", "Scheduler/Jetson", "COMMS/Downlink"}
         elif active in ("Power/EPS", "ADCS", "Thermal", "Propulsion", "Payload", "COMMS", "Jetson/Processing", "Other"):
             mapped = {
                 "Power/EPS": {"Power/EPS"},
@@ -556,6 +622,8 @@ class TelemetryDashboard(QtWidgets.QWidget):
         if force_redraw:
             self.metrics_dirty = True
             self._redraw_metrics_from_cache()
+        self._update_plot_host_min_height()
+        self._render_event_markers()
 
     def _refresh_visibility(self):
         self._apply_group_filter(force_redraw=True)
@@ -567,7 +635,11 @@ class TelemetryDashboard(QtWidgets.QWidget):
         for k in self.buffers:
             self.buffers[k].clear()
 
-        for r in self.telemetry_rows:
+        rows = self._rows_for_display()
+        if not rows:
+            rows = [self.telemetry_rows[-1]]
+
+        for r in rows:
             self.cycles.append(as_int(r.get("cycle", 0)))
             for key in self.buffers:
                 self.buffers[key].append(as_float(r.get(key, 0.0)))
@@ -583,6 +655,54 @@ class TelemetryDashboard(QtWidgets.QWidget):
         for _, pw in self.panel_plots.values():
             pw.update()
         self.metrics_dirty = False
+
+    def _rows_for_display(self):
+        rows = list(self.telemetry_rows)
+        if not self.playback_enabled or self.display_cycle < 0:
+            return rows
+        shown = [r for r in rows if as_int(r.get("cycle", 0)) <= self.display_cycle]
+        return shown
+
+    def _advance_playback_cycle(self):
+        if not self.telemetry_rows:
+            return False
+        latest = as_int(self.telemetry_rows[-1].get("cycle", 0))
+        self.latest_data_cycle = latest
+        prev = self.display_cycle
+        now = time.monotonic()
+
+        if not self.playback_enabled:
+            self.display_cycle = latest
+            self.last_playback_step_ts = now
+            return self.display_cycle != prev
+
+        if self.display_cycle < 0:
+            self.display_cycle = max(0, latest - max(0, self.playback_lag_cycles))
+            self.last_playback_step_ts = now
+            return self.display_cycle != prev
+
+        dt_ms = max(0.0, (now - self.last_playback_step_ts) * 1000.0)
+        if dt_ms <= 0.0:
+            return False
+        self.last_playback_step_ts = now
+
+        idle_s = now - self.last_telemetry_update_ts
+        idle_threshold_s = max(1.5, (self.playback_cycle_period_ms * max(1, self.playback_lag_cycles)) / 1000.0)
+        if idle_s >= idle_threshold_s:
+            target = latest
+        else:
+            target = max(0, latest - max(0, self.playback_lag_cycles))
+
+        if self.display_cycle >= target:
+            self.display_cycle = target
+            return self.display_cycle != prev
+
+        cycles_per_tick = dt_ms / max(1.0, float(self.playback_cycle_period_ms))
+        if target - self.display_cycle > max(1, self.playback_lag_cycles):
+            cycles_per_tick *= max(1.0, self.playback_catchup_multiplier)
+        step = max(1, int(cycles_per_tick))
+        self.display_cycle = min(target, self.display_cycle + step)
+        return self.display_cycle != prev
 
     def _scale_series_for_display(self, key, values, label):
         if not values:
@@ -605,7 +725,7 @@ class TelemetryDashboard(QtWidgets.QWidget):
     def _refresh_overview(self):
         t = self.status_tail or {}
         last_event = self.events[-1] if self.events else None
-        mode = "packaged review" if os.path.isdir(os.path.join(self.paths.get("run_dir", ""), "csv")) else "live working output"
+        mode = "packaged review" if self.is_review_mode else "live working output"
 
         sim_cycles = self.effective_cfg.get("sim_cycles", "n/a")
         pmax = self.effective_cfg.get("progressive_max_N", "n/a")
@@ -615,6 +735,7 @@ class TelemetryDashboard(QtWidgets.QWidget):
             f"Mode: {mode}",
             f"Run status: {self.run_summary.run_status} ({self.run_summary.completion_reason})",
             f"Cycle: {t.get('cycle', 'n/a')} / max cycles: {sim_cycles}",
+            f"Playback: {'buffered' if self.playback_enabled else 'direct'} | latest={self.latest_data_cycle if self.latest_data_cycle >= 0 else 'n/a'} displayed={self.display_cycle if self.display_cycle >= 0 else 'n/a'} lag={(self.latest_data_cycle - self.display_cycle) if (self.latest_data_cycle >= 0 and self.display_cycle >= 0) else 'n/a'}",
             f"Scheduler mode: {t.get('scheduler_mode', 'n/a')}",
             f"Compute budget (W): {t.get('compute_budget_w', 'n/a')}",
             f"Source/Bus load (W): {t.get('source_w', 'n/a')} / {t.get('total_bus_load_w', 'n/a')}",
@@ -656,18 +777,56 @@ class TelemetryDashboard(QtWidgets.QWidget):
         if not self.show_markers_cb.isChecked():
             return
 
+        target_panels = self._marker_target_panels()
+        if not target_panels:
+            return
+
         for e in self.events:
+            if not self._event_matches_marker_filter(e):
+                continue
             sev = e.severity.lower()
-            color = (90, 160, 255, 95)
+            color = (90, 160, 255, 65)
             if sev == "warn":
-                color = (255, 170, 70, 125)
+                color = (255, 170, 70, 95)
             elif sev == "error":
-                color = (255, 80, 80, 150)
-            line = pg.InfiniteLine(pos=e.cycle, angle=90, movable=False, pen=pg.mkPen(color, width=1))
-            for _, pw in self.panel_plots.values():
+                color = (255, 80, 80, 120)
+            for pw in target_panels:
                 line = pg.InfiniteLine(pos=e.cycle, angle=90, movable=False, pen=pg.mkPen(color, width=1))
                 pw.addItem(line)
                 self.event_markers.append(line)
+
+    def _marker_target_panels(self):
+        visible = [self.panel_plots[p][1] for p in PANEL_ORDER if self.panel_plots[p][0].isVisible()]
+        if not visible:
+            visible = [pw for (_, pw) in self.panel_plots.values()]
+        if self.marker_top_only_cb.isChecked():
+            return visible[:1]
+        return visible
+
+    def _event_matches_marker_filter(self, event):
+        mode = self.marker_filter.currentData() if hasattr(self, "marker_filter") else "warnings"
+        text = f"{event.event_type} {event.message}".lower()
+        sev = event.severity.lower()
+        if mode == "all":
+            return True
+        if mode == "warnings":
+            return sev in ("warn", "error")
+        if mode == "scheduler_jetson":
+            keys = ("scheduler", "jetson", "throttle", "suspend", "job_", "job ")
+            return any(k in text for k in keys)
+        if mode == "payload_image":
+            keys = ("payload", "dataset", "camera", "ring", "recon", "acquisition", "alignment")
+            return any(k in text for k in keys)
+        if mode == "adcs_thermal_prop":
+            keys = ("adcs", "tracker", "pointing", "wheel", "thermal", "heater", "propulsion", "burn")
+            return any(k in text for k in keys)
+        return True
+
+    def _on_marker_ui_changed(self):
+        enabled = self.show_markers_cb.isChecked()
+        self.marker_filter.setEnabled(enabled)
+        self.marker_top_only_cb.setEnabled(enabled)
+        self._render_event_markers()
 
     def _refresh_pipeline(self, telemetry_changed):
         if not self.telemetry_rows:
@@ -867,11 +1026,11 @@ class TelemetryDashboard(QtWidgets.QWidget):
         if rows:
             for r in rows:
                 self.telemetry_rows.append(r)
+            self.last_telemetry_update_ts = time.monotonic()
         if not self.telemetry_rows:
             return True
-        self._redraw_metrics_from_cache()
-
         self.status_tail = self.telemetry_rows[-1]
+        self.metrics_dirty = True
         return True
 
     def _refresh_events(self):
@@ -883,6 +1042,9 @@ class TelemetryDashboard(QtWidgets.QWidget):
 
     def _refresh_all(self, force=False):
         telemetry_changed = self._refresh_telemetry() if (force or self._file_changed(self.telemetry_path)) else False
+        playback_changed = self._advance_playback_cycle()
+        if playback_changed and self.telemetry_rows:
+            self.metrics_dirty = True
         if self.metrics_dirty and self.telemetry_rows:
             self._redraw_metrics_from_cache()
 

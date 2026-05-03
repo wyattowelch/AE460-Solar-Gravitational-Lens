@@ -116,7 +116,7 @@ Packaged run layout:
 Script helper:
 
 ```bash
-./scripts/run_dashboard.sh outputs/latest 200
+./scripts/run_dashboard.sh --review outputs/latest 1000
 ```
 
 Direct command:
@@ -124,8 +124,38 @@ Direct command:
 ```bash
 python3 tools/telemetry_dashboard/dashboard.py \
   --run-dir outputs/latest \
-  --refresh-ms 200
+  --refresh-ms 1000
 ```
+
+## Live GUI Demo (Fresh Live Mode)
+
+Default live demo behavior (safe move-aside of stale out_dir + start sim + launch dashboard):
+
+```bash
+./scripts/run_gui_demo.sh config/live_systems_demo.json 200
+```
+
+Live dashboard only (no sim launch):
+
+```bash
+./scripts/run_dashboard.sh --live config/live_systems_demo.json 200
+```
+
+Review a completed packaged case explicitly:
+
+```bash
+./scripts/run_dashboard.sh --review outputs/latest 1000
+```
+
+Adjust simulation runtime by editing `sim_cycles` in your config JSON.
+Adjust GUI update speed by changing the trailing refresh argument (milliseconds).
+Live dashboard pacing/smoothness (display-side only) is controlled by config keys:
+- `live_playback_buffer_enabled` (default `true` in live mode, `false` in review mode)
+- `live_playback_cycle_period_ms` (default `180`)
+- `live_playback_lag_cycles` (default `5`)
+- `live_playback_catchup_multiplier` (default `2.0`)
+
+Event markers now default to off to reduce clutter. Enable them from Metrics/Subsystem and choose a marker filter (`Warnings`, `Scheduler/Jetson`, `Payload/Image`, `ADCS/Thermal/Propulsion`, `All`).
 
 ## Standalone Tests and Smoke Checks
 
@@ -214,7 +244,8 @@ If you build manually, the repository scripts and docs still assume `build_wsl/`
 - `scripts/run_local_demo.sh [config_path]`: runs local no-TCP OBC simulation (defaults to `config/local_no_tcp.json`).
 - `scripts/run_tcp_jetson.sh [config_path]`: runs Jetson service in TCP mode (defaults to `config/tcp_localhost.json`).
 - `scripts/run_tcp_pi.sh [config_path]`: runs Pi flight in TCP mode (defaults to `config/tcp_localhost.json`).
-- `scripts/run_dashboard.sh [outputs/latest|config_path] [refresh_ms]`: launches read-only dashboard in packaged-run review mode or config-derived live mode.
+- `scripts/run_dashboard.sh [--review|--live] [outputs/latest|config_path] [refresh_ms]`: launches dashboard in explicit review/live mode (auto-detect if omitted).
+- `scripts/run_gui_demo.sh [config_path] [refresh_ms] [--no-start-sim] [--keep-existing]`: fresh live GUI demo launcher (moves stale live out_dir aside by default).
 - `scripts/clean_outputs.sh`: removes common output directories (`out*` presets).
 - `scripts/package_run_outputs.sh --case-name <name> --source-out-root <out_dir> [--config-path <cfg>]`: packages one run into `outputs/<timestamp>_<case>/` using structured `config/csv/images/heavy/subsystems` layout and writes run metadata.
 - `scripts/cleanup_packaged_outputs.sh`: retention/cleanup controller (dry-run by default).
@@ -303,14 +334,14 @@ Run with image file mode:
 
 ```bash
 ./scripts/run_local_demo.sh config/image_file_demo.json
-python3 tools/telemetry_dashboard/dashboard.py --telemetry out_image_file/mission_store/telemetry_cycles.csv --events out_image_file/mission_store/events.csv --manifest out_image_file/mission_store/products_manifest.csv --refresh-ms 200
+python3 tools/telemetry_dashboard/dashboard.py --telemetry out_image_file/mission_store/telemetry_cycles.csv --events out_image_file/mission_store/events.csv --manifest out_image_file/mission_store/products_manifest.csv --refresh-ms 1000
 ```
 
 Run with camera demo mode:
 
 ```bash
 ./scripts/run_local_demo.sh config/pi_camera_demo.json
-python3 tools/telemetry_dashboard/dashboard.py --telemetry out_camera_demo/mission_store/telemetry_cycles.csv --events out_camera_demo/mission_store/events.csv --manifest out_camera_demo/mission_store/products_manifest.csv --refresh-ms 200
+python3 tools/telemetry_dashboard/dashboard.py --telemetry out_camera_demo/mission_store/telemetry_cycles.csv --events out_camera_demo/mission_store/events.csv --manifest out_camera_demo/mission_store/products_manifest.csv --refresh-ms 1000
 ```
 
 This is a physical demo acquisition path only. It is not the final SGL optical forward model.
@@ -339,7 +370,7 @@ Terminal 2:
 Then launch dashboard against TCP output:
 
 ```bash
-./scripts/run_dashboard.sh config/tcp_localhost.json 200
+./scripts/run_dashboard.sh --live config/tcp_localhost.json 200
 ```
 
 ## Workflow 3: Future Pi + Jetson Hardware Deployment

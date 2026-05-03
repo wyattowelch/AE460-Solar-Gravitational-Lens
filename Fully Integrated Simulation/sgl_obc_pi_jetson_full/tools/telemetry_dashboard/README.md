@@ -7,7 +7,7 @@ This dashboard is read-only and never sends spacecraft control commands.
 Packaged run review (recommended):
 
 ```bash
-./scripts/run_dashboard.sh outputs/latest 200
+./scripts/run_dashboard.sh --review outputs/latest 1000
 # or
 python3 tools/telemetry_dashboard/dashboard.py --run-dir outputs/latest --refresh-ms 1000
 ```
@@ -15,15 +15,29 @@ python3 tools/telemetry_dashboard/dashboard.py --run-dir outputs/latest --refres
 Live working-output mode:
 
 ```bash
-./scripts/run_dashboard.sh config/image_file_demo.json 200
+./scripts/run_dashboard.sh --live config/image_file_demo.json 200
 # or
 python3 tools/telemetry_dashboard/dashboard.py --telemetry out_image_file/mission_store/telemetry_cycles.csv --refresh-ms 200
+```
+
+Live mode defaults to buffered playback for smoother visuals:
+- `live_playback_buffer_enabled=true`
+- `live_playback_cycle_period_ms=180`
+- `live_playback_lag_cycles=5`
+- `live_playback_catchup_multiplier=2.0`
+
+These are display-only pacing controls (raw CSV values and simulation timing are unchanged).
+
+Fresh live demo mode (recommended for demos):
+
+```bash
+./scripts/run_gui_demo.sh config/live_systems_demo.json 200
 ```
 
 ## Tabs
 
 - `Overview`: run name/config summary, completion status (`complete/partial/failed/running`), cycle, scheduler mode, compute budget, bus/source power, Jetson/payload state, downlink backlog, latest event.
-- `Metrics/Subsystem`: checkbox overlay plots grouped by ADCS, EPS/Power, Thermal, Propulsion, COMMS, Payload, Scheduler, Jetson, Downlink-related metrics.
+- `Metrics/Subsystem`: grouped multi-panel plots (independent y-axes) with views such as `Demo Default`, `Power Summary`, single-group views, and `All Groups: Stacked`.
 - `Events`: filter/search by subsystem token and warning/error severity.
 - `Image Pipeline`: raw/rectified/preconditioned/ring previews and progressive outputs (`128 base`, `256/512/1024/2048 upscaled+refined` when present). Missing stages show `MISSING / NOT COMPLETED`.
 - `Quality/Profile`: reconstruction quality (NMAE/MSE), per-stage timing, observations, ROI counts.
@@ -55,6 +69,12 @@ If dependencies are missing, `scripts/run_dashboard.sh` prints:
 ## WSL Note
 
 Dashboard requires a GUI/display server (X/Wayland forwarding). Headless test mode still works without display.
+
+## Marker Behavior
+
+- Event markers default to off to avoid clutter.
+- When enabled, use marker filter modes (`Warnings`, `Scheduler/Jetson`, `Payload/Image`, `ADCS/Thermal/Propulsion`, `All`).
+- `Markers On Top Panel Only` is enabled by default for readability.
 
 ## Smoke Test (Headless)
 

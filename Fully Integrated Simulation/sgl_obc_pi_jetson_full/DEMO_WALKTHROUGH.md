@@ -28,8 +28,17 @@ This uses `config/local_no_tcp.json` by default and writes outputs under:
 
 ```bash
 python3 -m pip install -r tools/telemetry_dashboard/requirements.txt
-./scripts/run_dashboard.sh config/local_no_tcp.json 200
+./scripts/run_dashboard.sh --review outputs/latest 1000
 ```
+
+## 3a. Live GUI Demo Mode
+
+```bash
+./scripts/run_gui_demo.sh config/live_systems_demo.json 300
+```
+
+This starts a fresh live-output dashboard view by default and launches the simulation in the background.
+The dashboard runs in buffered live playback by default (display-only lag for smoother updates).
 
 ## 4. Enable These Dashboard Groups
 
@@ -41,7 +50,7 @@ python3 -m pip install -r tools/telemetry_dashboard/requirements.txt
 - COMMS
 - Jetson/Processing
 
-Keep event markers enabled for explanation.
+Event marker default is off to reduce clutter; enable `Show Event Markers` and select a filter when narrating events.
 In the image preview panel, use the dropdown to switch between:
 
 - Raw Capture
@@ -114,7 +123,7 @@ Terminal B:
 Then:
 
 ```bash
-./scripts/run_dashboard.sh config/tcp_localhost.json 200
+./scripts/run_dashboard.sh --live config/tcp_localhost.json 200
 ```
 
 If localhost sockets are restricted in your environment, use local mode for demo continuity.
