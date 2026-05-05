@@ -27,6 +27,7 @@ Live mode defaults to buffered playback for smoother visuals:
 - `live_playback_catchup_multiplier=2.0`
 
 These are display-only pacing controls (raw CSV values and simulation timing are unchanged).
+When launched via `scripts/run_dashboard.sh --live <config> ...`, the dashboard reads these knobs from that config.
 
 Fresh live demo mode (recommended for demos):
 

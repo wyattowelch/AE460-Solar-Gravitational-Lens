@@ -163,7 +163,7 @@ class CsvTailReader:
 
 
 class TelemetryDashboard(QtWidgets.QWidget):
-    def __init__(self, paths, refresh_ms=200, max_points=3000, max_events=400):
+    def __init__(self, paths, refresh_ms=200, max_points=3000, max_events=400, config_path=None):
         super().__init__()
         self.paths = paths
         self.telemetry_path = paths["telemetry"]
@@ -173,6 +173,7 @@ class TelemetryDashboard(QtWidgets.QWidget):
         self.quality_path = paths["quality"]
         self.stage_timings_path = paths["stage_timings"]
         self.run_metadata_path = paths.get("run_metadata", "")
+        self.config_path = config_path
         self.run_summary = load_run_summary(self.run_metadata_path, paths.get("run_dir", ""))
         self.is_review_mode = os.path.isdir(os.path.join(paths.get("run_dir", ""), "csv"))
         self.is_live_mode = not self.is_review_mode
@@ -228,6 +229,12 @@ class TelemetryDashboard(QtWidgets.QWidget):
         if p and os.path.exists(p):
             try:
                 with open(p, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+        if self.config_path and os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, "r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception:
                 return {}
@@ -1070,6 +1077,7 @@ def main():
     parser.add_argument("--events", default=None, help="Events CSV path")
     parser.add_argument("--manifest", default=None, help="Manifest CSV path")
     parser.add_argument("--refresh-ms", type=int, default=None, help="Refresh interval ms")
+    parser.add_argument("--config-path", default=None, help="Optional config JSON path (used for live playback knobs)")
     args = parser.parse_args()
 
     run_dir = args.run_dir_flag or args.run_dir
@@ -1098,7 +1106,7 @@ def main():
 
     app = QtWidgets.QApplication(sys.argv)
     pg.setConfigOptions(antialias=True)
-    w = TelemetryDashboard(paths, refresh_ms=refresh_ms)
+    w = TelemetryDashboard(paths, refresh_ms=refresh_ms, config_path=args.config_path)
     w.show()
     sys.exit(app.exec())
 

@@ -135,6 +135,18 @@ Default live demo behavior (safe move-aside of stale out_dir + start sim + launc
 ./scripts/run_gui_demo.sh config/live_systems_demo.json 200
 ```
 
+Infinite live GUI demo (default ephemeral/no retained outputs):
+
+```bash
+./scripts/run_infinite_demo.sh 300
+```
+
+Infinite live GUI demo with saved outputs:
+
+```bash
+./scripts/run_infinite_demo.sh --save 300
+```
+
 Live dashboard only (no sim launch):
 
 ```bash
@@ -154,6 +166,8 @@ Live dashboard pacing/smoothness (display-side only) is controlled by config key
 - `live_playback_cycle_period_ms` (default `180`)
 - `live_playback_lag_cycles` (default `5`)
 - `live_playback_catchup_multiplier` (default `2.0`)
+
+For infinite mode, use `sim_cycles: -1` in config (or `scripts/run_infinite_demo.sh`, which applies this automatically).
 
 Event markers now default to off to reduce clutter. Enable them from Metrics/Subsystem and choose a marker filter (`Warnings`, `Scheduler/Jetson`, `Payload/Image`, `ADCS/Thermal/Propulsion`, `All`).
 
@@ -237,6 +251,7 @@ If you build manually, the repository scripts and docs still assume `build_wsl/`
 - `config/jetson_hardware.json`: Jetson-side deployment profile (bind `0.0.0.0:5500`, scratch/cache paths under `/var/tmp/sgl/jetson_service`, CUDA backend placeholder enabled).
 - `config/image_file_demo.json`: local printed-target/image-file payload ingestion demo (`payload_input_mode=image_file`).
 - `config/pi_camera_demo.json`: local Pi-camera demo mode (`payload_input_mode=pi_camera_demo`, with source-image fallback when camera capture is unavailable).
+- `config/live_infinite_saved.json`: infinite local run (`sim_cycles=-1`) with persisted outputs under `out_live_infinite_saved/`.
 
 ## Scripts
 
@@ -246,6 +261,7 @@ If you build manually, the repository scripts and docs still assume `build_wsl/`
 - `scripts/run_tcp_pi.sh [config_path]`: runs Pi flight in TCP mode (defaults to `config/tcp_localhost.json`).
 - `scripts/run_dashboard.sh [--review|--live] [outputs/latest|config_path] [refresh_ms]`: launches dashboard in explicit review/live mode (auto-detect if omitted).
 - `scripts/run_gui_demo.sh [config_path] [refresh_ms] [--no-start-sim] [--keep-existing]`: fresh live GUI demo launcher (moves stale live out_dir aside by default).
+- `scripts/run_infinite_demo.sh [--save] [--keep-running] [--config <cfg>] [refresh_ms]`: infinite live GUI run (`sim_cycles=-1`). Default is ephemeral `/tmp` output cleaned on exit; `--save` persists outputs.
 - `scripts/clean_outputs.sh`: removes common output directories (`out*` presets).
 - `scripts/package_run_outputs.sh --case-name <name> --source-out-root <out_dir> [--config-path <cfg>]`: packages one run into `outputs/<timestamp>_<case>/` using structured `config/csv/images/heavy/subsystems` layout and writes run metadata.
 - `scripts/cleanup_packaged_outputs.sh`: retention/cleanup controller (dry-run by default).

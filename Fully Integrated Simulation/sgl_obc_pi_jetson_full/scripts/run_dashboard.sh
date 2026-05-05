@@ -8,6 +8,7 @@ KEEP_EXISTING=0
 ARG1="outputs/latest"
 REFRESH_MS=""
 REFRESH_GIVEN=0
+CFG_PATH_FOR_DASH=""
 
 usage() {
   cat <<USAGE
@@ -103,6 +104,7 @@ PY
   : > "${out_root}/mission_store/products_manifest.csv"
   : > "${out_root}/mission_store/downlink_queue.csv"
   RUN_ARG="${out_root}/mission_store/telemetry_cycles.csv"
+  CFG_PATH_FOR_DASH="${CFG_PATH}"
   echo "Dashboard live mode against: ${RUN_ARG}"
 else
   echo "Dashboard review mode against: ${RUN_ARG}"
@@ -129,4 +131,8 @@ then
 fi
 
 pushd "${REPO_ROOT}" >/dev/null
-exec python3 tools/telemetry_dashboard/dashboard.py "${RUN_ARG}" --refresh-ms "${REFRESH_MS}"
+if [[ -n "${CFG_PATH_FOR_DASH}" ]]; then
+  exec python3 tools/telemetry_dashboard/dashboard.py "${RUN_ARG}" --refresh-ms "${REFRESH_MS}" --config-path "${CFG_PATH_FOR_DASH}"
+else
+  exec python3 tools/telemetry_dashboard/dashboard.py "${RUN_ARG}" --refresh-ms "${REFRESH_MS}"
+fi

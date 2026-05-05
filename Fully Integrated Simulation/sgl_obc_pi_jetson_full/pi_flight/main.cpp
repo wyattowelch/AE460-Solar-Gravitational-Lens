@@ -739,7 +739,8 @@ int main(int argc, char** argv) {
   const double budget_low_threshold = 40.0;
   const double budget_recover_threshold = 50.0;
 
-  for (int cycle = 0; cycle < C.sim_cycles; ++cycle) {
+  const bool infinite_run = (C.sim_cycles <= 0);
+  for (int cycle = 0; infinite_run || cycle < C.sim_cycles; ++cycle) {
     const double dt = C.dt_s;
     adcs.sense(dt); adcs.decide(dt); adcs.act(dt);
     comms.sense(dt); comms.decide(dt); comms.act(dt);
