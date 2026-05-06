@@ -3,6 +3,19 @@ project(sgl_obc_pi_jetson CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(OpenMP)
+option(SGL_ENABLE_CUDA "Enable CUDA backend acceleration for Jetson processing" OFF)
+set(SGL_CUDA_ENABLED OFF)
+if(SGL_ENABLE_CUDA)
+  include(CheckLanguage)
+  check_language(CUDA)
+  if(CMAKE_CUDA_COMPILER)
+    enable_language(CUDA)
+    set(SGL_CUDA_ENABLED ON)
+    message(STATUS "SGL CUDA backend enabled (${CMAKE_CUDA_COMPILER})")
+  else()
+    message(WARNING "SGL_ENABLE_CUDA=ON but CUDA compiler not found; building CPU fallback only")
+  endif()
+endif()
 
 set(SGL_STAR_TRACKER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../sgl_star_tracker_module/sgl_star_tracker_module")
 if(EXISTS "${SGL_STAR_TRACKER_DIR}/CMakeLists.txt")
@@ -67,8 +80,22 @@ if(OpenMP_CXX_FOUND)
   target_link_libraries(sgl_pi_lib PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
-add_library(sgl_jetson_lib jetson_processing/processor.cpp)
+set(SGL_JETSON_SOURCES
+  jetson_processing/processor.cpp
+)
+if(SGL_CUDA_ENABLED)
+  list(APPEND SGL_JETSON_SOURCES jetson_processing/cuda_backend.cu)
+else()
+  list(APPEND SGL_JETSON_SOURCES jetson_processing/cuda_backend_stub.cpp)
+endif()
+add_library(sgl_jetson_lib ${SGL_JETSON_SOURCES})
 target_link_libraries(sgl_jetson_lib PUBLIC sgl_common)
+if(SGL_CUDA_ENABLED)
+  set_target_properties(sgl_jetson_lib PROPERTIES CUDA_STANDARD 14 CUDA_STANDARD_REQUIRED ON)
+  target_compile_definitions(sgl_jetson_lib PUBLIC SGL_ENABLE_CUDA=1)
+else()
+  target_compile_definitions(sgl_jetson_lib PUBLIC SGL_ENABLE_CUDA=0)
+endif()
 if(OpenMP_CXX_FOUND)
   target_link_libraries(sgl_jetson_lib PUBLIC OpenMP::OpenMP_CXX)
 endif()
@@ -109,6 +136,17 @@ add_test(NAME test_roi_usefulness COMMAND test_roi_usefulness)
 add_executable(test_ring_observation tests/test_ring_observation.cpp)
 target_link_libraries(test_ring_observation PRIVATE sgl_common sgl_jetson_lib)
 add_test(NAME test_ring_observation COMMAND test_ring_observation)
+
+add_executable(test_image_io_formats tests/test_image_io_formats.cpp)
+target_link_libraries(test_image_io_formats PRIVATE sgl_common)
+add_test(NAME test_image_io_formats COMMAND test_image_io_formats)
+
+add_executable(test_source_preconditioning_formats tests/test_source_preconditioning_formats.cpp)
+target_link_libraries(test_source_preconditioning_formats PRIVATE sgl_common)
+add_test(
+  NAME test_source_preconditioning_formats
+  COMMAND test_source_preconditioning_formats ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
 add_test(
   NAME test_local_pi_run

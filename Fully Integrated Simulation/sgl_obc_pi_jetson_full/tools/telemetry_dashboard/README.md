@@ -48,6 +48,16 @@ Fresh live demo mode (recommended for demos):
 
 For `image_file` / `pi_camera_demo` modes, camera/image capture is a demo stand-in. The captured/rectified/preconditioned source image is used as ideal truth to generate synthetic SGL observations. In mission reality, the spacecraft would measure Einstein-ring data directly.
 
+Source file intake supports `PPM`, `PNG`, and `JPG/JPEG` directly. In `pi_camera_demo`, camera capture is written as JPG when possible and decoded directly into the pipeline (no external runtime conversion helper required).
+
+Backend resolution metadata is available in manifest status text:
+- `backend_requested`
+- `backend_resolved`
+- `cuda_build_enabled`
+- `cuda_runtime_available`
+- `fallback_used`
+- `backend_reason`
+
 ## Scenario Guidance (startup configs, not dashboard controls)
 
 - `nominal_demo`: `config/local_no_tcp.json`

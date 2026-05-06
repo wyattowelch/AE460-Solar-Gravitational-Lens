@@ -43,8 +43,8 @@ bool tiles_from_csv(const std::string& csv,std::vector<TileStat>& tiles,int& tx,
 std::vector<uint8_t> ppm_bytes(const ImageRGBA& img){ std::ostringstream oss; oss<<"P6\n"<<img.w<<" "<<img.h<<"\n255\n"; std::string hdr=oss.str(); std::vector<uint8_t> out(hdr.begin(),hdr.end()); out.reserve(out.size()+img.w*img.h*3); for(size_t i=0;i<img.rgba.size()/4;i++){ out.push_back(img.rgba[4*i]); out.push_back(img.rgba[4*i+1]); out.push_back(img.rgba[4*i+2]); } return out; }
 static ImageRGBA tiles_to_image(const std::vector<TileStat>& tiles,int tx,int ty){ ImageRGBA out; out.w=(unsigned)std::max(1,tx); out.h=(unsigned)std::max(1,ty); out.rgba.assign(4ull*out.w*out.h,255); for(int y=0;y<ty;y++) for(int x=0;x<tx;x++){ const auto&t=tiles[(size_t)y*tx+x]; size_t i=4ull*(y*out.w+x); out.rgba[i]=(uint8_t)std::lround(255.0*std::clamp(t.r,0.0,1.0)); out.rgba[i+1]=(uint8_t)std::lround(255.0*std::clamp(t.g,0.0,1.0)); out.rgba[i+2]=(uint8_t)std::lround(255.0*std::clamp(t.b,0.0,1.0)); } return out; }
 static bool extract_tiles_from_ring_observation(const ImageRGBA& obs,int tx,int ty,std::vector<TileStat>& tiles,double& cx,double& cy,double& r_peak,double& r_sigma){ if(obs.w==0||obs.h==0) return false; tx=std::max(16,tx); ty=std::max(8,ty); std::vector<double> lum((size_t)obs.w*obs.h,0.0); double lmin=1e9,lmax=-1e9; for(size_t i=0;i<lum.size();++i){ const uint8_t* p=&obs.rgba[4*i]; double L=(0.2126*p[0]+0.7152*p[1]+0.0722*p[2])/255.0; lum[i]=L; lmin=std::min(lmin,L); lmax=std::max(lmax,L); } double range=std::max(1e-6,lmax-lmin); for(auto&v:lum) v=(v-lmin)/range; std::vector<double> sorted=lum; std::nth_element(sorted.begin(),sorted.begin()+sorted.size()*3/4,sorted.end()); double thr=sorted[sorted.size()*3/4]; double wx=0,wy=0,ws=0; for(unsigned y=0;y<obs.h;y++) for(unsigned x=0;x<obs.w;x++){ double w=std::max(0.0,lum[(size_t)y*obs.w+x]-thr); if(w<=0) continue; wx+=w*x; wy+=w*y; ws+=w; } if(ws<=1e-9){ cx=0.5*(obs.w-1); cy=0.5*(obs.h-1); } else { cx=wx/ws; cy=wy/ws; } int rmax=(int)std::ceil(std::sqrt((double)obs.w*obs.w+(double)obs.h*obs.h)); std::vector<double> radial((size_t)rmax+1,0.0), radial_w((size_t)rmax+1,0.0); for(unsigned y=0;y<obs.h;y++) for(unsigned x=0;x<obs.w;x++){ double dx=x-cx,dy=y-cy; int ri=(int)std::lround(std::sqrt(dx*dx+dy*dy)); if(ri<0||ri>rmax) continue; double w=std::max(0.0,lum[(size_t)y*obs.w+x]-thr*0.5); radial[(size_t)ri]+=w; radial_w[(size_t)ri]+=1.0; } for(size_t i=0;i<radial.size();++i) if(radial_w[i]>0) radial[i]/=radial_w[i]; int best_r=1; for(int i=2;i<rmax;i++) if(radial[(size_t)i]>radial[(size_t)best_r]) best_r=i; r_peak=(double)best_r; double var=0,sumw=0; for(int i=1;i<rmax;i++){ double w=std::max(0.0,radial[(size_t)i]); double d=i-r_peak; var+=w*d*d; sumw+=w; } r_sigma=std::sqrt(var/std::max(1e-6,sumw)); r_sigma=std::clamp(r_sigma,2.0,0.25*r_peak); double inner=std::max(1.0,r_peak-2.5*r_sigma), outer=std::min((double)rmax,r_peak+2.5*r_sigma); double width=std::max(1.0,outer-inner); std::vector<double> sr((size_t)tx*ty,0),sg((size_t)tx*ty,0),sb((size_t)tx*ty,0),sl((size_t)tx*ty,0),cnt((size_t)tx*ty,0); for(unsigned y=0;y<obs.h;y++) for(unsigned x=0;x<obs.w;x++){ double dx=x-cx,dy=y-cy; double rr=std::sqrt(dx*dx+dy*dy); if(rr<inner||rr>outer) continue; double t=(std::atan2(dy,dx)+M_PI)/(2.0*M_PI); if(t<0) t+=1.0; if(t>=1) t-=1.0; int c=std::clamp((int)std::floor(t*tx),0,tx-1); double rv=(rr-inner)/width; int r=std::clamp((int)std::floor(rv*ty),0,ty-1); size_t idx=(size_t)r*tx+c; const uint8_t* p=&obs.rgba[4ull*(y*obs.w+x)]; double R=p[0]/255.0,G=p[1]/255.0,B=p[2]/255.0,L=0.2126*R+0.7152*G+0.0722*B; sr[idx]+=R; sg[idx]+=G; sb[idx]+=B; sl[idx]+=L; cnt[idx]+=1.0; } tiles.assign((size_t)tx*ty,TileStat{}); for(int r=0;r<ty;r++) for(int c=0;c<tx;c++){ size_t idx=(size_t)r*tx+c; double n=std::max(1.0,cnt[idx]); double detail_boost=1.0+0.35*std::min(1.0,std::fabs(sl[idx]/n-0.5)); tiles[idx]=TileStat{std::clamp(detail_boost*sr[idx]/n,0.0,1.0),std::clamp(detail_boost*sg[idx]/n,0.0,1.0),std::clamp(detail_boost*sb[idx]/n,0.0,1.0),std::clamp(detail_boost*sl[idx]/n,0.0,1.0)}; } return true; }
-bool generate_payload_dataset(const std::string& source_ppm,int tile_px_x,int tile_px_y,int ring_N,double ring_radius,double ring_sigma,const std::string& out_dir,std::string& dataset_csv,std::string& ring_preview_path,unsigned& srcW,unsigned& srcH,std::string& err){ ImageRGBA src; if(!read_ppm(source_ppm,src,err)) return false; srcW=src.w; srcH=src.h; int tx=0,ty=0; auto tiles=compute_tiles(src,tile_px_x,tile_px_y,tx,ty); fs::create_directories(out_dir); dataset_csv=tiles_to_csv(tiles,tx,ty); auto ring=render_ring_from_tiles(tiles,tx,ty,ring_N,ring_radius,ring_sigma); ring_preview_path=(fs::path(out_dir)/"ring_preview.ppm").string(); write_ppm(ring_preview_path,ring); ImageRGBA grid=src; draw_grid_overlay(grid,tile_px_x,tile_px_y); write_ppm((fs::path(out_dir)/"source_grid.ppm").string(),grid); return true; }
-bool generate_payload_dataset_from_ring_observation(const std::string& ring_observation_ppm,int tile_px_x,int tile_px_y,const std::string& out_dir,std::string& dataset_csv,std::string& ring_preview_path,unsigned& srcW,unsigned& srcH,std::string& err){ ImageRGBA obs; if(!read_ppm(ring_observation_ppm,obs,err)) return false; srcW=obs.w; srcH=obs.h; int tx=std::clamp((int)obs.w/std::max(1,tile_px_x/2),16,256), ty=std::clamp((int)obs.h/std::max(1,tile_px_y/2),8,128); std::vector<TileStat> tiles; double cx=0,cy=0,rp=0,rs=0; if(!extract_tiles_from_ring_observation(obs,tx,ty,tiles,cx,cy,rp,rs)){ err="failed to extract ring tiles"; return false; } fs::create_directories(out_dir); dataset_csv=tiles_to_csv(tiles,tx,ty); ImageRGBA unwrapped=tiles_to_image(tiles,tx,ty); ring_preview_path=(fs::path(out_dir)/"ring_unwrapped_preview.ppm").string(); write_ppm(ring_preview_path,unwrapped); ImageRGBA marked=obs; int r0=(int)std::lround(rp), r1=(int)std::lround(rp-2.5*rs), r2=(int)std::lround(rp+2.5*rs); for(unsigned y=0;y<marked.h;y++) for(unsigned x=0;x<marked.w;x++){ double d=std::sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy)); int di=(int)std::lround(d); if(di==r0||di==r1||di==r2){ size_t i=4ull*(y*marked.w+x); marked.rgba[i]=255; marked.rgba[i+1]=64; marked.rgba[i+2]=64; } } write_ppm((fs::path(out_dir)/"ring_detect_overlay.ppm").string(),marked); return true; }
+bool generate_payload_dataset(const std::string& source_ppm,int tile_px_x,int tile_px_y,int ring_N,double ring_radius,double ring_sigma,const std::string& out_dir,std::string& dataset_csv,std::string& ring_preview_path,unsigned& srcW,unsigned& srcH,std::string& err){ ImageRGBA src; if(!read_image_auto(source_ppm,src,err)) return false; srcW=src.w; srcH=src.h; int tx=0,ty=0; auto tiles=compute_tiles(src,tile_px_x,tile_px_y,tx,ty); fs::create_directories(out_dir); dataset_csv=tiles_to_csv(tiles,tx,ty); auto ring=render_ring_from_tiles(tiles,tx,ty,ring_N,ring_radius,ring_sigma); ring_preview_path=(fs::path(out_dir)/"ring_preview.ppm").string(); write_ppm(ring_preview_path,ring); ImageRGBA grid=src; draw_grid_overlay(grid,tile_px_x,tile_px_y); write_ppm((fs::path(out_dir)/"source_grid.ppm").string(),grid); return true; }
+bool generate_payload_dataset_from_ring_observation(const std::string& ring_observation_ppm,int tile_px_x,int tile_px_y,const std::string& out_dir,std::string& dataset_csv,std::string& ring_preview_path,unsigned& srcW,unsigned& srcH,std::string& err){ ImageRGBA obs; if(!read_image_auto(ring_observation_ppm,obs,err)) return false; srcW=obs.w; srcH=obs.h; int tx=std::clamp((int)obs.w/std::max(1,tile_px_x/2),16,256), ty=std::clamp((int)obs.h/std::max(1,tile_px_y/2),8,128); std::vector<TileStat> tiles; double cx=0,cy=0,rp=0,rs=0; if(!extract_tiles_from_ring_observation(obs,tx,ty,tiles,cx,cy,rp,rs)){ err="failed to extract ring tiles"; return false; } fs::create_directories(out_dir); dataset_csv=tiles_to_csv(tiles,tx,ty); ImageRGBA unwrapped=tiles_to_image(tiles,tx,ty); ring_preview_path=(fs::path(out_dir)/"ring_unwrapped_preview.ppm").string(); write_ppm(ring_preview_path,unwrapped); ImageRGBA marked=obs; int r0=(int)std::lround(rp), r1=(int)std::lround(rp-2.5*rs), r2=(int)std::lround(rp+2.5*rs); for(unsigned y=0;y<marked.h;y++) for(unsigned x=0;x<marked.w;x++){ double d=std::sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy)); int di=(int)std::lround(d); if(di==r0||di==r1||di==r2){ size_t i=4ull*(y*marked.w+x); marked.rgba[i]=255; marked.rgba[i+1]=64; marked.rgba[i+2]=64; } } write_ppm((fs::path(out_dir)/"ring_detect_overlay.ppm").string(),marked); return true; }
 
 namespace {
 static inline double lum_at(const uint8_t* p) { return (0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]) / 255.0; }
@@ -276,12 +276,113 @@ static std::array<double, 3> sample_rgb_bilinear(const ImageRGBA& img, double x,
   }
   return out;
 }
+
+static inline bool mask_get_nearest(const std::vector<uint8_t>& mask, unsigned w, unsigned h, double x, double y) {
+  if (mask.empty() || w == 0 || h == 0) return false;
+  const int xi = static_cast<int>(std::lround(x));
+  const int yi = static_cast<int>(std::lround(y));
+  if (xi < 0 || yi < 0 || xi >= static_cast<int>(w) || yi >= static_cast<int>(h)) return false;
+  return mask[static_cast<size_t>(yi) * w + static_cast<size_t>(xi)] != 0;
+}
+
+static std::vector<uint8_t> dilate_mask(const std::vector<uint8_t>& in, unsigned w, unsigned h, int r) {
+  if (in.empty() || w == 0 || h == 0 || r <= 0) return in;
+  std::vector<uint8_t> out(in.size(), 0u);
+  for (unsigned y = 0; y < h; ++y) {
+    for (unsigned x = 0; x < w; ++x) {
+      bool on = false;
+      for (int dy = -r; dy <= r && !on; ++dy) {
+        const int yy = static_cast<int>(y) + dy;
+        if (yy < 0 || yy >= static_cast<int>(h)) continue;
+        for (int dx = -r; dx <= r; ++dx) {
+          const int xx = static_cast<int>(x) + dx;
+          if (xx < 0 || xx >= static_cast<int>(w)) continue;
+          if ((dx * dx + dy * dy) > r * r) continue;
+          if (in[static_cast<size_t>(yy) * w + static_cast<size_t>(xx)] != 0) {
+            on = true;
+            break;
+          }
+        }
+      }
+      out[static_cast<size_t>(y) * w + x] = on ? 1u : 0u;
+    }
+  }
+  return out;
+}
+
+static bool bbox_from_mask(const std::vector<uint8_t>& mask, unsigned w, unsigned h, int& x0, int& y0, int& x1, int& y1) {
+  x0 = static_cast<int>(w);
+  y0 = static_cast<int>(h);
+  x1 = -1;
+  y1 = -1;
+  if (mask.empty() || w == 0 || h == 0) return false;
+  for (unsigned y = 0; y < h; ++y) {
+    for (unsigned x = 0; x < w; ++x) {
+      if (mask[static_cast<size_t>(y) * w + x] == 0) continue;
+      x0 = std::min(x0, static_cast<int>(x));
+      y0 = std::min(y0, static_cast<int>(y));
+      x1 = std::max(x1, static_cast<int>(x));
+      y1 = std::max(y1, static_cast<int>(y));
+    }
+  }
+  return x1 >= x0 && y1 >= y0;
+}
+
+static std::vector<uint8_t> grow_support_from_seed(const ImageRGBA& in, const std::vector<uint8_t>& seed_mask, const BackgroundModel& bg) {
+  const size_t pix = static_cast<size_t>(in.w) * in.h;
+  if (seed_mask.empty() || seed_mask.size() != pix) return seed_mask;
+  int sx0 = static_cast<int>(in.w), sy0 = static_cast<int>(in.h), sx1 = -1, sy1 = -1;
+  if (!bbox_from_mask(seed_mask, in.w, in.h, sx0, sy0, sx1, sy1)) return seed_mask;
+  const int sw = std::max(1, sx1 - sx0 + 1);
+  const int sh = std::max(1, sy1 - sy0 + 1);
+  // Keep support growth bounded so ringed-object preprocessing stays fast on CPU-only hosts.
+  const int expand_r = std::clamp(static_cast<int>(std::lround(0.02 * std::max(sw, sh))), 4, 24);
+  std::vector<uint8_t> loose(pix, 0u);
+  for (unsigned y = 0; y < in.h; ++y) {
+    for (unsigned x = 0; x < in.w; ++x) {
+      const size_t i = static_cast<size_t>(y) * in.w + x;
+      const uint8_t* p = &in.rgba[4ull * i];
+      const double r = p[0] / 255.0, g = p[1] / 255.0, b = p[2] / 255.0;
+      const double l = lum_at(p);
+      const double sat = saturation_of(p);
+      const double color_d = std::sqrt((r - bg.r) * (r - bg.r) + (g - bg.g) * (g - bg.g) + (b - bg.b) * (b - bg.b));
+      const bool keep = ((color_d > std::max(0.014, bg.sat + 0.006)) && sat > std::max(0.004, bg.sat * 0.15)) ||
+                        (std::fabs(l - bg.l) > 0.016 && sat > 0.003);
+      loose[i] = keep ? 1u : 0u;
+    }
+  }
+  std::vector<uint8_t> grown_seed = dilate_mask(seed_mask, in.w, in.h, expand_r);
+  std::vector<uint8_t> out(pix, 0u);
+  std::vector<size_t> q;
+  q.reserve(pix / 4);
+  for (size_t i = 0; i < pix; ++i) {
+    if (grown_seed[i] == 0 || loose[i] == 0) continue;
+    out[i] = 1u;
+    q.push_back(i);
+  }
+  size_t head = 0;
+  while (head < q.size()) {
+    const size_t idx = q[head++];
+    const int x = static_cast<int>(idx % in.w);
+    const int y = static_cast<int>(idx / in.w);
+    const int nx[4] = {x - 1, x + 1, x, x};
+    const int ny[4] = {y, y, y - 1, y + 1};
+    for (int k = 0; k < 4; ++k) {
+      if (nx[k] < 0 || ny[k] < 0 || nx[k] >= static_cast<int>(in.w) || ny[k] >= static_cast<int>(in.h)) continue;
+      const size_t ni = static_cast<size_t>(ny[k]) * in.w + static_cast<size_t>(nx[k]);
+      if (out[ni] != 0 || loose[ni] == 0) continue;
+      out[ni] = 1u;
+      q.push_back(ni);
+    }
+  }
+  return out;
+}
 }  // namespace
 
 bool precondition_source_image(const std::string& input_ppm,const std::string& out_dir,const SourcePreconditioningConfig& cfg,SourcePreconditioningResult& out,std::string& err) {
   out = SourcePreconditioningResult{};
   ImageRGBA in;
-  if (!read_ppm(input_ppm, in, err)) return false;
+  if (!read_image_auto(input_ppm, in, err)) return false;
   fs::create_directories(out_dir);
   const int bg = std::clamp(cfg.background_value, 0, 255);
   PlanetCandidate cand{};
@@ -289,9 +390,20 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
     err = "failed to isolate planet candidate";
     return false;
   }
-  const int bx0 = cand.x0, by0 = cand.y0, bx1 = cand.x1, by1 = cand.y1;
-  const int bw = std::max(1, bx1 - bx0 + 1);
-  const int bh = std::max(1, by1 - by0 + 1);
+  int bx0 = cand.x0, by0 = cand.y0, bx1 = cand.x1, by1 = cand.y1;
+  int bw = std::max(1, bx1 - bx0 + 1);
+  int bh = std::max(1, by1 - by0 + 1);
+  const BackgroundModel bg_model = estimate_border_background(in);
+  std::vector<uint8_t> grown_support = grow_support_from_seed(in, cand.mask, bg_model);
+  int gx0 = 0, gy0 = 0, gx1 = -1, gy1 = -1;
+  if (bbox_from_mask(grown_support, in.w, in.h, gx0, gy0, gx1, gy1)) {
+    bx0 = std::min(bx0, gx0);
+    by0 = std::min(by0, gy0);
+    bx1 = std::max(bx1, gx1);
+    by1 = std::max(by1, gy1);
+    bw = std::max(1, bx1 - bx0 + 1);
+    bh = std::max(1, by1 - by0 + 1);
+  }
   const double ar = static_cast<double>(bw) / static_cast<double>(bh);
   std::string typ = cfg.object_type;
   if (typ == "auto") typ = (ar > 1.35) ? "ringed_planet" : "disk_planet";
@@ -314,19 +426,86 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
   out.detected_planet_radius_px = disk_r;
   out.mask_coverage_fraction = cand.mask_coverage;
 
-  const double crop_half = disk_r * (1.0 + std::max(0.10, pad_frac));
-  const int cx0 = std::max(0, static_cast<int>(std::floor(cand.cx - crop_half)));
-  const int cy0 = std::max(0, static_cast<int>(std::floor(cand.cy - crop_half)));
-  const int cx1 = std::min(static_cast<int>(in.w) - 1, static_cast<int>(std::ceil(cand.cx + crop_half)));
-  const int cy1 = std::min(static_cast<int>(in.h) - 1, static_cast<int>(std::ceil(cand.cy + crop_half)));
+  const double obj_cx = 0.5 * (bx0 + bx1);
+  const double obj_cy = 0.5 * (by0 + by1);
+  const double obj_w = std::max(1.0, static_cast<double>(bw));
+  const double obj_h = std::max(1.0, static_cast<double>(bh));
+  const double max_extent = std::max(8.0, (1.0 - 2.0 * min_margin) * static_cast<double>(N));
+
+  double crop_half_x = 0.0, crop_half_y = 0.0;
+  double crop_center_x = cand.cx, crop_center_y = cand.cy;
+  double obj_span_x = 0.0, obj_span_y = 0.0;
+  double s = 1.0;
+
+  if (typ == "disk_planet") {
+    const double disk_pad = std::max(0.10, pad_frac);
+    crop_half_x = disk_r * (1.0 + disk_pad);
+    crop_half_y = disk_r * (1.0 + disk_pad);
+    obj_span_x = std::max(1.0, 2.0 * crop_half_x);
+    obj_span_y = std::max(1.0, 2.0 * crop_half_y);
+    const double target_diameter = std::max(32.0, fill * static_cast<double>(N));
+    const double s_fill = target_diameter / std::max(1.0, 2.0 * disk_r);
+    const double s_margin = max_extent / std::max(obj_span_x, obj_span_y);
+    s = std::max(0.01, std::min(s_fill, s_margin));
+  } else {
+    crop_center_x = obj_cx;
+    crop_center_y = obj_cy;
+    const double padded_w = obj_w * (1.0 + 2.0 * pad_frac);
+    const double padded_h = obj_h * (1.0 + 2.0 * pad_frac);
+    crop_half_x = 0.5 * padded_w;
+    crop_half_y = 0.5 * padded_h;
+    obj_span_x = std::max(1.0, 2.0 * crop_half_x);
+    obj_span_y = std::max(1.0, 2.0 * crop_half_y);
+    const double target_extent = std::max(32.0, fill * static_cast<double>(N));
+    const double s_fill = target_extent / std::max(obj_span_x, obj_span_y);
+    const double s_margin = max_extent / std::max(obj_span_x, obj_span_y);
+    s = std::max(0.01, std::min(s_fill, s_margin));
+  }
+
+  const int cx0 = std::max(0, static_cast<int>(std::floor(crop_center_x - crop_half_x)));
+  const int cy0 = std::max(0, static_cast<int>(std::floor(crop_center_y - crop_half_y)));
+  const int cx1 = std::min(static_cast<int>(in.w) - 1, static_cast<int>(std::ceil(crop_center_x + crop_half_x)));
+  const int cy1 = std::min(static_cast<int>(in.h) - 1, static_cast<int>(std::ceil(crop_center_y + crop_half_y)));
   const int cw = std::max(1, cx1 - cx0 + 1);
   const int ch = std::max(1, cy1 - cy0 + 1);
-  const int target_diameter = std::max(32, static_cast<int>(std::lround(fill * N)));
-  const double s = static_cast<double>(target_diameter) / std::max(1.0, 2.0 * disk_r);
   const unsigned ow = static_cast<unsigned>(std::max(1, static_cast<int>(std::lround(cw * s))));
   const unsigned oh = static_cast<unsigned>(std::max(1, static_cast<int>(std::lround(ch * s))));
-  if (ow + 2 >= static_cast<unsigned>(N) || oh + 2 >= static_cast<unsigned>(N)) {
-    out.clipping_guard_triggered = true;
+  if (ow + 2 >= static_cast<unsigned>(N) || oh + 2 >= static_cast<unsigned>(N)) out.clipping_guard_triggered = true;
+
+  std::vector<uint8_t> obj_mask = cand.mask;
+  if (typ != "disk_planet") {
+    std::vector<uint8_t> seed = dilate_mask(cand.mask, in.w, in.h, std::clamp(static_cast<int>(std::lround(0.015 * std::max(bw, bh))), 2, 12));
+    std::vector<uint8_t> support = grown_support.empty() ? cand.mask : grown_support;
+    for (size_t i = 0; i < support.size() && i < seed.size(); ++i) {
+      support[i] = (support[i] || seed[i]) ? 1u : 0u;
+    }
+    std::vector<uint8_t> soft(support.size(), 0u);
+    const int soft_pad_x = std::clamp(static_cast<int>(std::lround(0.08 * bw)), 4, 128);
+    const int soft_pad_y = std::clamp(static_cast<int>(std::lround(0.08 * bh)), 4, 128);
+    const int sx0 = std::max(0, bx0 - soft_pad_x);
+    const int sy0 = std::max(0, by0 - soft_pad_y);
+    const int sx1 = std::min(static_cast<int>(in.w) - 1, bx1 + soft_pad_x);
+    const int sy1 = std::min(static_cast<int>(in.h) - 1, by1 + soft_pad_y);
+    for (int y = sy0; y <= sy1; ++y) {
+      for (int x = sx0; x <= sx1; ++x) {
+        const size_t i = static_cast<size_t>(y) * in.w + static_cast<size_t>(x);
+        const uint8_t* p = &in.rgba[4ull * i];
+        const double r = p[0] / 255.0, g = p[1] / 255.0, b = p[2] / 255.0;
+        const double l = lum_at(p);
+        const double sat = saturation_of(p);
+        const double color_d = std::sqrt((r - bg_model.r) * (r - bg_model.r) + (g - bg_model.g) * (g - bg_model.g) + (b - bg_model.b) * (b - bg_model.b));
+        const bool keep_soft = (color_d > std::max(0.020, bg_model.sat + 0.010) && sat > std::max(0.010, bg_model.sat * 0.20)) ||
+                               (std::fabs(l - bg_model.l) > 0.030 && sat > 0.008);
+        soft[i] = keep_soft ? 1u : 0u;
+      }
+    }
+    std::vector<uint8_t> grown_seed2 = dilate_mask(seed, in.w, in.h, std::clamp(static_cast<int>(std::lround(0.025 * std::max(bw, bh))), 4, 20));
+    obj_mask.assign(support.size(), 0u);
+    for (size_t i = 0; i < obj_mask.size(); ++i) {
+      const bool keep = support[i] || (grown_seed2[i] && soft[i]);
+      obj_mask[i] = keep ? 1u : 0u;
+    }
+    obj_mask = dilate_mask(obj_mask, in.w, in.h, 2);
   }
   ImageRGBA canvas;
   canvas.w = static_cast<unsigned>(N);
@@ -344,14 +523,17 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
   const double disk_cy = cand.cy;
   const double disk_rx = std::max(2.0, disk_r * 1.01);
   const double disk_ry = std::max(2.0, disk_r * 1.01);
+  std::vector<uint8_t> fg_out(static_cast<size_t>(N) * N, 0u);
   for (unsigned y = 0; y < oh; ++y) for (unsigned x = 0; x < ow; ++x) {
     const double sx = cx0 + (static_cast<double>(x) + 0.5) * inv_s;
     const double sy = cy0 + (static_cast<double>(y) + 0.5) * inv_s;
-    bool keep = (typ != "disk_planet");
+    bool keep = false;
     if (typ == "disk_planet") {
       const double ex = (sx - disk_cx) / std::max(1.0, disk_rx);
       const double ey = (sy - disk_cy) / std::max(1.0, disk_ry);
       keep = (ex * ex + ey * ey) <= 1.0;
+    } else {
+      keep = mask_get_nearest(obj_mask, in.w, in.h, sx, sy);
     }
     if (!keep) continue;
     auto rgb = sample_rgb_bilinear(in, sx, sy, static_cast<uint8_t>(bg));
@@ -359,15 +541,58 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
     canvas.rgba[di + 0] = static_cast<uint8_t>(std::lround(rgb[0]));
     canvas.rgba[di + 1] = static_cast<uint8_t>(std::lround(rgb[1]));
     canvas.rgba[di + 2] = static_cast<uint8_t>(std::lround(rgb[2]));
+    fg_out[static_cast<size_t>(oy + static_cast<int>(y)) * static_cast<size_t>(N) + static_cast<size_t>(ox + static_cast<int>(x))] = 1u;
   }
   // Gentle deterministic normalization.
-  double mean = 0.0;
-  for (size_t i = 0; i < static_cast<size_t>(N) * N; ++i) mean += lum_at(&canvas.rgba[4 * i]);
-  mean /= static_cast<double>(N) * N;
-  const double tgt = 0.48;
-  const double gain = std::clamp(tgt / std::max(0.08, mean), 0.80, 1.25);
-  for (size_t i = 0; i < static_cast<size_t>(N) * N; ++i) for (int c = 0; c < 3; ++c) {
-    canvas.rgba[4 * i + c] = static_cast<uint8_t>(std::lround(std::clamp(canvas.rgba[4 * i + c] * gain, 0.0, 255.0)));
+  if (typ == "disk_planet") {
+    double mean = 0.0;
+    for (size_t i = 0; i < static_cast<size_t>(N) * N; ++i) mean += lum_at(&canvas.rgba[4 * i]);
+    mean /= static_cast<double>(N) * N;
+    const double tgt = 0.48;
+    const double gain = std::clamp(tgt / std::max(0.08, mean), 0.80, 1.25);
+    for (size_t i = 0; i < static_cast<size_t>(N) * N; ++i) for (int c = 0; c < 3; ++c) {
+      canvas.rgba[4 * i + c] = static_cast<uint8_t>(std::lround(std::clamp(canvas.rgba[4 * i + c] * gain, 0.0, 255.0)));
+    }
+  } else {
+    double mean_obj = 0.0;
+    double mean_sat_obj = 0.0;
+    double n_obj = 0.0;
+    for (size_t i = 0; i < static_cast<size_t>(N) * N; ++i) {
+      if (fg_out[i] == 0) continue;
+      const uint8_t* p = &canvas.rgba[4 * i];
+      mean_obj += lum_at(p);
+      mean_sat_obj += saturation_of(p);
+      n_obj += 1.0;
+    }
+    if (n_obj > 0.0) {
+      mean_obj /= n_obj;
+      mean_sat_obj /= n_obj;
+      double gain = 1.0;
+      if (mean_obj < 0.30) {
+        gain = std::clamp(0.35 / std::max(0.10, mean_obj), 0.90, 1.10);
+      } else if (mean_obj > 0.62) {
+        gain = std::clamp(0.58 / std::max(0.40, mean_obj), 0.85, 1.00);
+      }
+      double sat_gain = 1.0;
+      if (mean_sat_obj < 0.09) {
+        sat_gain = std::clamp(0.09 / std::max(0.03, mean_sat_obj), 1.00, 1.35);
+      }
+      for (size_t i = 0; i < static_cast<size_t>(N) * N; ++i) {
+        if (fg_out[i] == 0) continue;
+        double r = std::clamp(canvas.rgba[4 * i + 0] * gain, 0.0, 255.0);
+        double g = std::clamp(canvas.rgba[4 * i + 1] * gain, 0.0, 255.0);
+        double b = std::clamp(canvas.rgba[4 * i + 2] * gain, 0.0, 255.0);
+        if (sat_gain > 1.0001) {
+          const double ll = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          r = std::clamp(ll + (r - ll) * sat_gain, 0.0, 255.0);
+          g = std::clamp(ll + (g - ll) * sat_gain, 0.0, 255.0);
+          b = std::clamp(ll + (b - ll) * sat_gain, 0.0, 255.0);
+        }
+        canvas.rgba[4 * i + 0] = static_cast<uint8_t>(std::lround(r));
+        canvas.rgba[4 * i + 1] = static_cast<uint8_t>(std::lround(g));
+        canvas.rgba[4 * i + 2] = static_cast<uint8_t>(std::lround(b));
+      }
+    }
   }
   ImageRGBA mask = canvas, overlay = canvas;
   ImageRGBA src_mask = in, src_overlay = in;
@@ -417,8 +642,7 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
   }
   int mx0 = N, my0 = N, mx1 = -1, my1 = -1;
   for (size_t i = 0; i < static_cast<size_t>(N) * N; ++i) {
-    const double l = lum_at(&canvas.rgba[4 * i]);
-    const bool fg = std::fabs(l - (bg / 255.0)) > 0.05;
+    const bool fg = fg_out[i] != 0;
     const uint8_t v = fg ? 255 : 0;
     mask.rgba[4 * i + 0] = v; mask.rgba[4 * i + 1] = v; mask.rgba[4 * i + 2] = v;
     if (!fg) continue;
@@ -455,14 +679,14 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
   out.object_type_detected = typ;
   out.bbox_x0 = bx0; out.bbox_y0 = by0; out.bbox_x1 = bx1; out.bbox_y1 = by1;
   out.fill_fraction_used = fill;
-  out.method = (typ == "disk_planet") ? "disk_candidate_center_radius_norm" : "bbox_center_scale_norm";
+  out.method = (typ == "disk_planet") ? "disk_candidate_center_radius_norm" : "bbox_mask_center_scale_norm";
   return true;
 }
 
 bool generate_sgl_observation_dataset(const std::string& preconditioned_source_ppm,const std::string& out_dir,const SglObservationConfig& cfg,SglObservationSummary& summary,std::string& dataset_descriptor,unsigned& srcW,unsigned& srcH,std::string& err) {
   summary = SglObservationSummary{};
   ImageRGBA src;
-  if (!read_ppm(preconditioned_source_ppm, src, err)) return false;
+  if (!read_image_auto(preconditioned_source_ppm, src, err)) return false;
   srcW = src.w;
   srcH = src.h;
   if (srcW == 0 || srcH == 0) { err = "preconditioned source empty"; return false; }

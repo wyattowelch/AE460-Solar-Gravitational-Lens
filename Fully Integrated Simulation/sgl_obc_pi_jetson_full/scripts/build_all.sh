@@ -5,7 +5,15 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "${SCRIPT_DIR}/.." && pwd)
 BUILD_DIR="${REPO_ROOT}/build_wsl"
 
-cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}"
+cmake_args=()
+if [[ "${SGL_ENABLE_CUDA:-0}" == "1" ]]; then
+  cmake_args+=(-DSGL_ENABLE_CUDA=ON)
+  echo "CUDA build requested: SGL_ENABLE_CUDA=ON"
+else
+  cmake_args+=(-DSGL_ENABLE_CUDA=OFF)
+fi
+
+cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}" "${cmake_args[@]}"
 cmake --build "${BUILD_DIR}" -j
 
 echo "Built integrated OBC/Jetson binaries in: ${BUILD_DIR}"

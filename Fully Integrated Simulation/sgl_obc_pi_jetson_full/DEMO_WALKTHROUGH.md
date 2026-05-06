@@ -11,6 +11,12 @@ cd /home/bunta/sgl/sgl_obc_pi_jetson_full
 ./scripts/build_all.sh
 ```
 
+Jetson CUDA build:
+
+```bash
+SGL_ENABLE_CUDA=1 ./scripts/build_all.sh
+```
+
 ## 2. Run Local Demo (No TCP)
 
 ```bash
@@ -67,6 +73,16 @@ Optional physical-input demo runs:
 ./scripts/run_local_demo.sh config/pi_camera_demo.json
 ```
 
+`image_file` source intake accepts `PPM`, `PNG`, and `JPG/JPEG` directly.
+
+High-fidelity no-GUI validation runs:
+
+```bash
+./scripts/run_local_demo.sh config/earth_jpg_2048_force_complete.json
+./scripts/run_local_demo.sh config/mars_jpg_2048_force_complete.json
+./scripts/run_local_demo.sh config/saturn_jpg_2048_force_complete.json
+```
+
 ## 5. Cause/Effect Narrative to Present
 
 Use telemetry curves together with event markers/events table.
@@ -111,19 +127,25 @@ Use telemetry curves together with event markers/events table.
 Terminal A:
 
 ```bash
-./scripts/run_tcp_jetson.sh
+./scripts/run_tcp_jetson.sh config/tcp_pi_to_jetson_cpu.json
 ```
 
 Terminal B:
 
 ```bash
-./scripts/run_tcp_pi.sh
+./scripts/run_tcp_pi.sh config/tcp_pi_to_jetson_cpu.json
 ```
 
 Then:
 
 ```bash
-./scripts/run_dashboard.sh --live config/tcp_localhost.json 200
+./scripts/run_dashboard.sh --live config/tcp_pi_to_jetson_cpu.json 200
 ```
 
 If localhost sockets are restricted in your environment, use local mode for demo continuity.
+
+## 8. Backend Probe (CPU/Auto/CUDA/Fallback)
+
+```bash
+./scripts/probe_jetson_backend.sh
+```

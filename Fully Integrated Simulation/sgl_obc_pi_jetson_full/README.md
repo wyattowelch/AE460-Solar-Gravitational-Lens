@@ -90,6 +90,22 @@ ctest --test-dir build_wsl --output-on-failure
 ./scripts/run_local_demo.sh config/pi_camera_demo.json
 ```
 
+Source image intake for `image_file` mode now supports `PPM`, `PNG`, and `JPG/JPEG` directly.
+
+High-fidelity 2048 JPG force-complete runs:
+
+```bash
+./scripts/run_local_demo.sh config/earth_jpg_2048_force_complete.json
+./scripts/run_local_demo.sh config/mars_jpg_2048_force_complete.json
+./scripts/run_local_demo.sh config/saturn_jpg_2048_force_complete.json
+```
+
+Pi camera 2048 force-complete profile (for later hardware bring-up):
+
+```bash
+./scripts/run_local_demo.sh config/pi_camera_2048_force_complete_unthrottled.json
+```
+
 ## Run Progressive Profiling
 
 ```bash
@@ -193,6 +209,13 @@ python3 -m py_compile tools/telemetry_dashboard/core.py tools/telemetry_dashboar
 PYTHONPATH=tools/telemetry_dashboard python3 -m unittest tools/telemetry_dashboard/tests/test_core_smoke.py
 ```
 
+Image format intake tests (JPG/PNG/PPM for Earth/Mars/Saturn):
+
+```bash
+ctest --test-dir build_wsl -R test_image_io_formats --output-on-failure
+ctest --test-dir build_wsl -R test_source_preconditioning_formats --output-on-failure
+```
+
 ## Nodes
 - **Raspberry Pi OBC (`sgl_pi_flight`)**
   - master command/data handling
@@ -207,7 +230,7 @@ PYTHONPATH=tools/telemetry_dashboard python3 -m unittest tools/telemetry_dashboa
   - adaptive ROI refinement
   - progressive staged outputs (`128 -> 256 -> 512 -> ...`)
   - image product generation
-  - intended CUDA insertion point
+  - CPU/CUDA backend resolution with safe fallback
 
 ## Design rules
 - Pi is the system authority.
@@ -224,6 +247,12 @@ Project-standard build command:
 
 ```bash
 ./scripts/build_all.sh
+```
+
+CUDA-enabled build (Jetson):
+
+```bash
+SGL_ENABLE_CUDA=1 ./scripts/build_all.sh
 ```
 
 `build_all.sh` creates and uses `build_wsl/` as the standard build output directory. Run tests with:
@@ -248,7 +277,10 @@ If you build manually, the repository scripts and docs still assume `build_wsl/`
 - `config/local_no_tcp.json`: local single-process validation (`jetson_transport=local`, ADCS-stability gate disabled, output at `out_local/`).
 - `config/tcp_localhost.json`: two-process localhost TCP validation (`jetson_transport=tcp`, `127.0.0.1:5500`, bounded TCP timeouts, output at `out_tcp/`).
 - `config/pi_hardware.json`: Pi/OBC-side deployment profile (Jetson host placeholder `192.168.0.50`, Pi-owned persistent output path `/var/lib/sgl/mission`).
-- `config/jetson_hardware.json`: Jetson-side deployment profile (bind `0.0.0.0:5500`, scratch/cache paths under `/var/tmp/sgl/jetson_service`, CUDA backend placeholder enabled).
+- `config/jetson_hardware.json`: Jetson-side deployment profile (bind `0.0.0.0:5500`, scratch/cache paths under `/var/tmp/sgl/jetson_service`, CUDA backend request enabled).
+- `config/cuda_local_probe.json`: local CUDA probe (`jetson_backend=cuda`, fallback disabled).
+- `config/tcp_pi_to_jetson_cpu.json`: TCP profile with explicit CPU backend.
+- `config/tcp_pi_to_jetson_cuda.json`: TCP profile with CUDA request and CPU fallback enabled.
 - `config/image_file_demo.json`: local printed-target/image-file payload ingestion demo (`payload_input_mode=image_file`).
 - `config/pi_camera_demo.json`: local Pi-camera demo mode (`payload_input_mode=pi_camera_demo`, with source-image fallback when camera capture is unavailable).
 - `config/live_infinite_saved.json`: infinite local run (`sim_cycles=-1`) with persisted outputs under `out_live_infinite_saved/`.
@@ -259,6 +291,7 @@ If you build manually, the repository scripts and docs still assume `build_wsl/`
 - `scripts/run_local_demo.sh [config_path]`: runs local no-TCP OBC simulation (defaults to `config/local_no_tcp.json`).
 - `scripts/run_tcp_jetson.sh [config_path]`: runs Jetson service in TCP mode (defaults to `config/tcp_localhost.json`).
 - `scripts/run_tcp_pi.sh [config_path]`: runs Pi flight in TCP mode (defaults to `config/tcp_localhost.json`).
+- `scripts/probe_jetson_backend.sh`: probes backend resolution for `cpu`, `auto`, `cuda+fallback`, and `cuda+strict`.
 - `scripts/run_dashboard.sh [--review|--live] [outputs/latest|config_path] [refresh_ms]`: launches dashboard in explicit review/live mode (auto-detect if omitted).
 - `scripts/run_gui_demo.sh [config_path] [refresh_ms] [--no-start-sim] [--keep-existing]`: fresh live GUI demo launcher (moves stale live out_dir aside by default).
 - `scripts/run_infinite_demo.sh [--save] [--keep-running] [--config <cfg>] [refresh_ms]`: infinite live GUI run (`sim_cycles=-1`). Default is ephemeral `/tmp` output cleaned on exit; `--save` persists outputs.
@@ -376,17 +409,24 @@ Use this for full communication-path validation and target deployment behavior:
 
 Terminal 1:
 ```bash
-./scripts/run_tcp_jetson.sh
+./scripts/run_tcp_jetson.sh config/tcp_pi_to_jetson_cpu.json
 ```
 Terminal 2:
 ```bash
-./scripts/run_tcp_pi.sh
+./scripts/run_tcp_pi.sh config/tcp_pi_to_jetson_cpu.json
 ```
 
 Then launch dashboard against TCP output:
 
 ```bash
-./scripts/run_dashboard.sh --live config/tcp_localhost.json 200
+./scripts/run_dashboard.sh --live config/tcp_pi_to_jetson_cpu.json 200
+```
+
+CUDA-request TCP localhost variant:
+
+```bash
+./scripts/run_tcp_jetson.sh config/tcp_pi_to_jetson_cuda.json
+./scripts/run_tcp_pi.sh config/tcp_pi_to_jetson_cuda.json
 ```
 
 ## Workflow 3: Future Pi + Jetson Hardware Deployment
@@ -406,6 +446,16 @@ Before deploying:
 - update `host` in `config/pi_hardware.json` to your Jetson reachable IP.
 - align `port` on both profiles.
 - ensure writable paths exist (`/var/lib/sgl/mission`, `/var/tmp/sgl/jetson_service`), or adjust paths.
+
+Backend probe + CUDA setup:
+
+```bash
+./scripts/probe_jetson_backend.sh
+SGL_ENABLE_CUDA=1 ./scripts/build_all.sh
+```
+
+Detailed setup and TCP examples:
+- [`docs/JETSON_CUDA_TCP_SETUP.md`](docs/JETSON_CUDA_TCP_SETUP.md)
 
 ## Workflow 4: Dashboard-Only Demo
 
@@ -485,11 +535,18 @@ Recommended selection:
 For future Pi+Jetson deployment, keep these profiles and switch to TCP transport variants as needed.
 
 ## Notes
-- `source_image` should be a binary PPM (P6) image.
-- The current image-processing path is CPU-only but designed so CUDA kernels can replace coarse/refine functions later.
+- `source_image` can be binary PPM (P6), PNG, or JPG/JPEG.
+- Jetson processing backend supports `cpu`, `auto`, and `cuda` resolution modes.
+- Backend resolution status is written into product status strings:
+  - `backend_requested`
+  - `backend_resolved`
+  - `cuda_build_enabled`
+  - `cuda_runtime_available`
+  - `fallback_used`
+  - `backend_reason`
 - `sgl_obc_pi_jetson_full` builds the star tracker module directly from `../sgl_star_tracker_module/sgl_star_tracker_module`.
 - Pi power budgeting now includes dynamic ADCS draw from star-tracker validity, pointing correction torque, and wheel saturation behavior.
-- On non-NVIDIA hardware (for example AMD RX 6800), CUDA is not available. Use the current CPU path locally; add HIP/OpenCL backend later if desired.
+- On non-NVIDIA hardware (for example AMD RX 6800), use `jetson_backend=cpu` (or `auto` to resolve safely to CPU).
 - Progressive controls are in `config/config.json`:
   - `progressive_base_N`, `progressive_max_N`, `progressive_scale`
   - `progressive_max_stages`, `progressive_roi_growth`
@@ -497,20 +554,24 @@ For future Pi+Jetson deployment, keep these profiles and switch to TCP transport
   - `payload_input_mode`: `synthetic_image`, `image_file`, or `pi_camera_demo`
   - `payload_fusion_alpha`: fusion weight for each new capture (higher = faster adaptation)
 - Jetson backend controls in `config/config.json`:
-  - `jetson_backend`: `cpu` or `cuda`
-  - `jetson_allow_cpu_fallback`: if `true`, non-CUDA builds fall back to CPU instead of failing
+  - `jetson_backend`: `cpu`, `auto`, or `cuda`
+  - `jetson_allow_cpu_fallback`: if `true`, `jetson_backend=cuda` falls back to CPU when CUDA is unavailable
 - TCP robustness controls in `config/config.json`:
   - `connect_timeout_ms`: Pi-to-Jetson connect timeout
   - `job_ack_timeout_ms`: timeout waiting for Jetson job acceptance
   - `job_result_timeout_ms`: timeout waiting for Jetson job completion
-- If you want to use a Pale Blue Dot image, set `source_image` in `config/config.json` to that PPM path.
+- If you want to use a Pale Blue Dot image, set `source_image` in `config/config.json` to a PPM/PNG/JPG path.
 - Demo camera/file modes write payload acquisition debug artifacts and telemetry:
   - raw capture path
   - rectified image path
   - alignment validity/score
   - blur/brightness/contrast metrics
-- Current image loader accepts PPM (P6). If your source is JPG/PNG from ESA/USGS, convert to PPM first.
-  - Example converted assets in your workspace root: `../bluemarble.ppm`, `../mars.ppm`, `../saturn.ppm`
+- Current source image loader accepts PPM (P6), PNG, and JPG/JPEG directly.
+  - Example assets in your workspace root:
+    - `../bluemarble.ppm`, `../bluemarble.png`, `../bluemarble.jpg`
+    - `../mars.ppm`, `../mars.png`, `../mars.jpg`
+    - `../saturn.ppm`, `../saturn.png`, `../saturn.jpg`
+  - Internal reconstruction stages remain lossless-friendly (`ImageRGBA` + PPM-compatible paths). The pipeline is not converted to JPG intermediates.
   - For synthetic ring generation from a truth image, keep `payload_input_mode="synthetic_image"`.
   - For printed/camera demo ingestion, use `payload_input_mode="image_file"` or `payload_input_mode="pi_camera_demo"`.
 

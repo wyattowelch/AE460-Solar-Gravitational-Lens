@@ -1,4 +1,5 @@
 #include "processor.hpp"
+#include "cuda_backend.hpp"
 #include "../common/reconstruction.hpp"
 #include <algorithm>
 #include <chrono>
@@ -17,6 +18,16 @@ struct SglDataset {
   int obs_count=0, A=0, R=0;
   std::vector<SglObsInfo> obs;
   std::vector<uint8_t> annulus;  // obs * A * R * 3
+};
+
+struct BackendResolution {
+  bool ok = false;
+  bool fallback_used = false;
+  bool cuda_build_enabled = false;
+  bool cuda_runtime_available = false;
+  std::string requested = "cpu";
+  std::string resolved = "cpu";
+  std::string reason = "ok";
 };
 
 static std::map<std::string,std::string> parse_kv_csv(const std::string& s) {
@@ -116,7 +127,7 @@ static std::vector<proto::RegionOfInterest> select_rois_from_confidence(const Im
   return out;
 }
 
-static ProcessResult reconstruct_from_sgl_dataset(const SglDataset& ds, unsigned outW, unsigned outH, int observation_count, int angular_stride, int radial_stride, int roi_count, const std::vector<proto::RegionOfInterest>& prior_rois, int prior_roi_growth, bool compute_rois) {
+static ProcessResult reconstruct_from_sgl_dataset(const SglDataset& ds, unsigned outW, unsigned outH, int observation_count, int angular_stride, int radial_stride, int roi_count, const std::vector<proto::RegionOfInterest>& prior_rois, int prior_roi_growth, bool compute_rois, const BackendResolution& be) {
   ProcessResult r;
   const int obs_use = std::max(1, std::min(observation_count, ds.obs_count));
   const int A = std::max(1, ds.A);
@@ -248,12 +259,21 @@ static ProcessResult reconstruct_from_sgl_dataset(const SglDataset& ds, unsigned
   float wmax = 1e-6f;
   for (float w : wsum) wmax = std::max(wmax, w);
   std::vector<float> conf((size_t)outW * outH, 0.0f);
-  for (size_t i = 0; i < (size_t)outW * outH; ++i) {
-    const float w = std::max(1e-6f, wsum[i]);
-    out.rgba[4 * i + 0] = (uint8_t)std::lround(std::clamp(acc_r[i] / w, 0.0f, 255.0f));
-    out.rgba[4 * i + 1] = (uint8_t)std::lround(std::clamp(acc_g[i] / w, 0.0f, 255.0f));
-    out.rgba[4 * i + 2] = (uint8_t)std::lround(std::clamp(acc_b[i] / w, 0.0f, 255.0f));
-    conf[i] = std::clamp(w / wmax, 0.0f, 1.0f);
+  bool used_cuda = false;
+  if (be.resolved == "cuda") {
+    std::string cuda_err;
+    if (cuda_finalize_accum_to_image(acc_r, acc_g, acc_b, wsum, wmax, outW, outH, out.rgba, conf, cuda_err)) {
+      used_cuda = true;
+    }
+  }
+  if (!used_cuda) {
+    for (size_t i = 0; i < (size_t)outW * outH; ++i) {
+      const float w = std::max(1e-6f, wsum[i]);
+      out.rgba[4 * i + 0] = (uint8_t)std::lround(std::clamp(acc_r[i] / w, 0.0f, 255.0f));
+      out.rgba[4 * i + 1] = (uint8_t)std::lround(std::clamp(acc_g[i] / w, 0.0f, 255.0f));
+      out.rgba[4 * i + 2] = (uint8_t)std::lround(std::clamp(acc_b[i] / w, 0.0f, 255.0f));
+      conf[i] = std::clamp(w / wmax, 0.0f, 1.0f);
+    }
   }
   const auto t1 = std::chrono::steady_clock::now();
   r.reconstruction_ms = std::chrono::duration<double,std::milli>(t1 - t0).count();
@@ -269,32 +289,168 @@ static ProcessResult reconstruct_from_sgl_dataset(const SglDataset& ds, unsigned
 }
 }  // namespace
 
-static bool resolve_backend(std::string backend, bool allow_cpu_fallback, std::string& resolved_backend, std::string& status_prefix) {
+static BackendResolution resolve_backend(std::string backend, bool allow_cpu_fallback) {
+  BackendResolution out{};
   for (auto& c : backend) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
   if (backend.empty()) backend = "cpu";
+  out.requested = backend;
+#if SGL_ENABLE_CUDA
+  out.cuda_build_enabled = true;
+#else
+  out.cuda_build_enabled = false;
+#endif
+  std::string runtime_reason;
+  out.cuda_runtime_available = out.cuda_build_enabled && cuda_runtime_available(runtime_reason);
+
   if (backend == "cpu") {
-    resolved_backend = "cpu";
-    status_prefix.clear();
-    return true;
+    out.ok = true;
+    out.resolved = "cpu";
+    out.reason = "requested_cpu";
+    return out;
+  }
+  if (backend == "auto") {
+    out.ok = true;
+    if (out.cuda_runtime_available) {
+      out.resolved = "cuda";
+      out.reason = "auto_cuda_available";
+    } else {
+      out.resolved = "cpu";
+      out.reason = out.cuda_build_enabled ? runtime_reason : "no_cuda_build";
+    }
+    return out;
   }
   if (backend == "cuda") {
-#ifdef SGL_ENABLE_CUDA
-    resolved_backend = "cuda";
-    status_prefix.clear();
-    return true;
-#else
-    if (!allow_cpu_fallback) return false;
-    resolved_backend = "cpu";
-    status_prefix = "cuda_unavailable_fallback_cpu; ";
-    return true;
-#endif
+    if (out.cuda_runtime_available) {
+      out.ok = true;
+      out.resolved = "cuda";
+      out.reason = "requested_cuda_available";
+      return out;
+    }
+    if (allow_cpu_fallback) {
+      out.ok = true;
+      out.fallback_used = true;
+      out.resolved = "cpu";
+      out.reason = out.cuda_build_enabled ? runtime_reason : "no_cuda_build";
+      return out;
+    }
+    out.ok = false;
+    out.resolved = "cuda";
+    out.reason = out.cuda_build_enabled ? runtime_reason : "no_cuda_build";
+    return out;
   }
-  if (!allow_cpu_fallback) return false;
-  resolved_backend = "cpu";
-  status_prefix = "backend_unknown_fallback_cpu; ";
-  return true;
+  if (allow_cpu_fallback) {
+    out.ok = true;
+    out.fallback_used = true;
+    out.resolved = "cpu";
+    out.reason = "unknown_backend";
+    return out;
+  }
+  out.ok = false;
+  out.resolved = "cpu";
+  out.reason = "unknown_backend";
+  return out;
 }
 
-ProcessResult process_coarse_job(const std::string& dataset_csv,unsigned outW,unsigned outH,int coarse_groups_x,int coarse_groups_y,int roi_count,const std::vector<proto::RegionOfInterest>& prior_rois,int prior_roi_growth,int observation_count,const std::string& scratch_dir,const std::string& backend,bool allow_cpu_fallback){ ProcessResult r; fs::create_directories(scratch_dir); std::string resolved_backend, status_prefix; if(!resolve_backend(backend,allow_cpu_fallback,resolved_backend,status_prefix)){ r.status="backend unavailable"; return r; } if(is_sgl_dataset_descriptor(dataset_csv)){ SglDataset ds; std::string de; if(!load_sgl_dataset_from_descriptor(dataset_csv,ds,de)){ r.status="failed to parse sgl descriptor: "+de; return r; } int astride = (outW <= 256 ? 8 : (outW <= 512 ? 4 : 2)); int rstride = (outW <= 256 ? 4 : (outW <= 512 ? 2 : 1)); r = reconstruct_from_sgl_dataset(ds,outW,outH,observation_count,astride,rstride,roi_count,prior_rois,prior_roi_growth,true); r.status = status_prefix + "coarse complete (" + resolved_backend + "; sgl_annulus)"; return r; } std::vector<TileStat> tiles; int tx=0,ty=0; if(!tiles_from_csv(dataset_csv,tiles,tx,ty)){ r.status="failed to parse dataset csv"; return r; } const std::vector<proto::RegionOfInterest>* prior_ptr = prior_rois.empty() ? nullptr : &prior_rois; const int obs = std::max(1, observation_count); double roi_ms_acc=0.0; auto t0=std::chrono::steady_clock::now(); ImageRGBA img{}; for(int i=0;i<obs;++i){ double roi_ms_i=0.0; img=reconstruct_coarse_from_tiles(tiles,tx,ty,coarse_groups_x,coarse_groups_y,outW,outH,&r.rois,roi_count,prior_ptr,prior_roi_growth,&roi_ms_i); roi_ms_acc += roi_ms_i; } auto t1=std::chrono::steady_clock::now(); r.reconstruction_ms = std::chrono::duration<double,std::milli>(t1-t0).count(); r.roi_selection_ms = roi_ms_acc; r.image_ppm=ppm_bytes(img); r.success=true; r.status=status_prefix+"coarse complete ("+resolved_backend+"; legacy_tiles)"; return r; }
-ProcessResult process_refine_job(const std::string& dataset_csv,unsigned outW,unsigned outH,int coarse_groups_x,int coarse_groups_y,const std::vector<proto::RegionOfInterest>& rois,int observation_count,const std::string& scratch_dir,const std::string& backend,bool allow_cpu_fallback){ ProcessResult r; fs::create_directories(scratch_dir); std::string resolved_backend, status_prefix; if(!resolve_backend(backend,allow_cpu_fallback,resolved_backend,status_prefix)){ r.status="backend unavailable"; return r; } if(is_sgl_dataset_descriptor(dataset_csv)){ SglDataset ds; std::string de; if(!load_sgl_dataset_from_descriptor(dataset_csv,ds,de)){ r.status="failed to parse sgl descriptor: "+de; return r; } r = reconstruct_from_sgl_dataset(ds,outW,outH,observation_count,1,1,std::max(1,(int)rois.size()),{},0,false); r.rois = rois; r.status = status_prefix + "refine complete (" + resolved_backend + "; sgl_annulus)"; return r; } std::vector<TileStat> tiles; int tx=0,ty=0; if(!tiles_from_csv(dataset_csv,tiles,tx,ty)){ r.status="failed to parse dataset csv"; return r; } const int obs = std::max(1, observation_count); auto t0=std::chrono::steady_clock::now(); ImageRGBA img{}; for(int i=0;i<obs;++i){ img=refine_from_tiles(tiles,tx,ty,coarse_groups_x,coarse_groups_y,rois,outW,outH); } auto t1=std::chrono::steady_clock::now(); r.reconstruction_ms = std::chrono::duration<double,std::milli>(t1-t0).count(); r.image_ppm=ppm_bytes(img); r.success=true; r.status=status_prefix+"refine complete ("+resolved_backend+"; legacy_tiles)"; return r; }
+static std::string backend_status_prefix(const BackendResolution& be) {
+  std::ostringstream oss;
+  oss << "backend_requested=" << be.requested
+      << "; backend_resolved=" << be.resolved
+      << "; cuda_build_enabled=" << (be.cuda_build_enabled ? 1 : 0)
+      << "; cuda_runtime_available=" << (be.cuda_runtime_available ? 1 : 0)
+      << "; fallback_used=" << (be.fallback_used ? 1 : 0)
+      << "; backend_reason=" << be.reason << "; ";
+  return oss.str();
+}
+
+ProcessResult process_coarse_job(const std::string& dataset_csv,unsigned outW,unsigned outH,int coarse_groups_x,int coarse_groups_y,int roi_count,const std::vector<proto::RegionOfInterest>& prior_rois,int prior_roi_growth,int observation_count,const std::string& scratch_dir,const std::string& backend,bool allow_cpu_fallback) {
+  ProcessResult r;
+  fs::create_directories(scratch_dir);
+  const BackendResolution be = resolve_backend(backend, allow_cpu_fallback);
+  if (!be.ok) {
+    r.status = backend_status_prefix(be) + "backend unavailable";
+    return r;
+  }
+  const std::string status_prefix = backend_status_prefix(be);
+
+  if (is_sgl_dataset_descriptor(dataset_csv)) {
+    SglDataset ds;
+    std::string de;
+    if (!load_sgl_dataset_from_descriptor(dataset_csv, ds, de)) {
+      r.status = status_prefix + "failed to parse sgl descriptor: " + de;
+      return r;
+    }
+    const int astride = (outW <= 256 ? 8 : (outW <= 512 ? 4 : 2));
+    const int rstride = (outW <= 256 ? 4 : (outW <= 512 ? 2 : 1));
+    r = reconstruct_from_sgl_dataset(ds, outW, outH, observation_count, astride, rstride, roi_count, prior_rois, prior_roi_growth, true, be);
+    r.status = status_prefix + "coarse complete (" + be.resolved + "; sgl_annulus)";
+    return r;
+  }
+
+  std::vector<TileStat> tiles;
+  int tx = 0, ty = 0;
+  if (!tiles_from_csv(dataset_csv, tiles, tx, ty)) {
+    r.status = status_prefix + "failed to parse dataset csv";
+    return r;
+  }
+  const std::vector<proto::RegionOfInterest>* prior_ptr = prior_rois.empty() ? nullptr : &prior_rois;
+  const int obs = std::max(1, observation_count);
+  double roi_ms_acc = 0.0;
+  const auto t0 = std::chrono::steady_clock::now();
+  ImageRGBA img{};
+  for (int i = 0; i < obs; ++i) {
+    double roi_ms_i = 0.0;
+    img = reconstruct_coarse_from_tiles(tiles, tx, ty, coarse_groups_x, coarse_groups_y, outW, outH, &r.rois, roi_count, prior_ptr, prior_roi_growth, &roi_ms_i);
+    roi_ms_acc += roi_ms_i;
+  }
+  const auto t1 = std::chrono::steady_clock::now();
+  r.reconstruction_ms = std::chrono::duration<double,std::milli>(t1 - t0).count();
+  r.roi_selection_ms = roi_ms_acc;
+  r.image_ppm = ppm_bytes(img);
+  r.success = true;
+  r.status = status_prefix + "coarse complete (" + be.resolved + "; legacy_tiles)";
+  return r;
+}
+
+ProcessResult process_refine_job(const std::string& dataset_csv,unsigned outW,unsigned outH,int coarse_groups_x,int coarse_groups_y,const std::vector<proto::RegionOfInterest>& rois,int observation_count,const std::string& scratch_dir,const std::string& backend,bool allow_cpu_fallback) {
+  ProcessResult r;
+  fs::create_directories(scratch_dir);
+  const BackendResolution be = resolve_backend(backend, allow_cpu_fallback);
+  if (!be.ok) {
+    r.status = backend_status_prefix(be) + "backend unavailable";
+    return r;
+  }
+  const std::string status_prefix = backend_status_prefix(be);
+
+  if (is_sgl_dataset_descriptor(dataset_csv)) {
+    SglDataset ds;
+    std::string de;
+    if (!load_sgl_dataset_from_descriptor(dataset_csv, ds, de)) {
+      r.status = status_prefix + "failed to parse sgl descriptor: " + de;
+      return r;
+    }
+    r = reconstruct_from_sgl_dataset(ds, outW, outH, observation_count, 1, 1, std::max(1, (int)rois.size()), {}, 0, false, be);
+    r.rois = rois;
+    r.status = status_prefix + "refine complete (" + be.resolved + "; sgl_annulus)";
+    return r;
+  }
+
+  std::vector<TileStat> tiles;
+  int tx = 0, ty = 0;
+  if (!tiles_from_csv(dataset_csv, tiles, tx, ty)) {
+    r.status = status_prefix + "failed to parse dataset csv";
+    return r;
+  }
+  const int obs = std::max(1, observation_count);
+  const auto t0 = std::chrono::steady_clock::now();
+  ImageRGBA img{};
+  for (int i = 0; i < obs; ++i) {
+    img = refine_from_tiles(tiles, tx, ty, coarse_groups_x, coarse_groups_y, rois, outW, outH);
+  }
+  const auto t1 = std::chrono::steady_clock::now();
+  r.reconstruction_ms = std::chrono::duration<double,std::milli>(t1 - t0).count();
+  r.image_ppm = ppm_bytes(img);
+  r.success = true;
+  r.status = status_prefix + "refine complete (" + be.resolved + "; legacy_tiles)";
+  return r;
+}
 } // namespace sgl
