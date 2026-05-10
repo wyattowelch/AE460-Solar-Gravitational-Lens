@@ -330,15 +330,21 @@ bool run_shell_command(const std::string& cmd) {
   return rc == 0;
 }
 
-bool try_capture_frame_to_ppm(const std::string& out_ppm, std::string& why) {
+bool try_capture_frame_to_jpg(const std::string& out_jpg, std::string& why) {
   why.clear();
+  const std::string rpicam_cmd =
+      "sh -lc 'command -v rpicam-jpeg >/dev/null 2>&1 && rpicam-jpeg -n -o \"" + out_jpg + "\" >/dev/null 2>&1'";
+  if (run_shell_command(rpicam_cmd)) return true;
+  const std::string libcamera_cmd =
+      "sh -lc 'command -v libcamera-jpeg >/dev/null 2>&1 && libcamera-jpeg -n -o \"" + out_jpg + "\" >/dev/null 2>&1'";
+  if (run_shell_command(libcamera_cmd)) return true;
   const std::string ffmpeg_cmd =
-      "sh -lc 'command -v ffmpeg >/dev/null 2>&1 && ffmpeg -y -f video4linux2 -i /dev/video0 -vframes 1 \"" + out_ppm + "\" >/dev/null 2>&1'";
+      "sh -lc 'command -v ffmpeg >/dev/null 2>&1 && ffmpeg -y -f video4linux2 -i /dev/video0 -vframes 1 \"" + out_jpg + "\" >/dev/null 2>&1'";
   if (run_shell_command(ffmpeg_cmd)) return true;
   const std::string fswebcam_cmd =
-      "sh -lc 'command -v fswebcam >/dev/null 2>&1 && fswebcam --no-banner -r 1280x720 \"" + out_ppm + "\" >/dev/null 2>&1'";
+      "sh -lc 'command -v fswebcam >/dev/null 2>&1 && fswebcam --no-banner -r 1280x720 \"" + out_jpg + "\" >/dev/null 2>&1'";
   if (run_shell_command(fswebcam_cmd)) return true;
-  why = "No camera capture command succeeded (ffmpeg/fswebcam).";
+  why = "No camera capture command succeeded (rpicam-jpeg/libcamera-jpeg/ffmpeg/fswebcam).";
   return false;
 }
 }  // namespace
@@ -514,9 +520,9 @@ void PayloadSim::act(double){
       if (ok) pending_events_.push_back(PayloadEvent{"payload_capture_accepted", "info", "Synthetic payload capture accepted", dataset_id});
     } else {
       if (input_mode_ == "pi_camera_demo") {
-        raw_capture_path_ = (fs::path(ddir) / "raw_capture.ppm").string();
+        raw_capture_path_ = (fs::path(ddir) / "raw_capture.jpg").string();
         std::string why;
-        capture_ok = try_capture_frame_to_ppm(raw_capture_path_, why);
+        capture_ok = try_capture_frame_to_jpg(raw_capture_path_, why);
         if (capture_ok) {
           pending_events_.push_back(PayloadEvent{"camera_capture_completed", "info", "Camera capture completed", raw_capture_path_});
         } else {
@@ -525,7 +531,7 @@ void PayloadSim::act(double){
             raw_capture_path_ = (fs::path(ddir) / "raw_capture_fallback.ppm").string();
             std::string e2;
             ImageRGBA fallback{};
-            if (read_ppm(source_ppm_, fallback, e2) && write_ppm(raw_capture_path_, fallback)) {
+            if (read_image_auto(source_ppm_, fallback, e2) && write_ppm(raw_capture_path_, fallback)) {
               capture_ok = true;
               pending_events_.push_back(PayloadEvent{"camera_capture_completed", "info", "Fallback image used for camera demo", raw_capture_path_});
             }
@@ -534,7 +540,7 @@ void PayloadSim::act(double){
       } else {
         std::string e2;
         ImageRGBA file_img{};
-        capture_ok = read_ppm(source_ppm_, file_img, e2);
+        capture_ok = read_image_auto(source_ppm_, file_img, e2);
         raw_capture_path_ = (fs::path(ddir) / "raw_capture_from_file.ppm").string();
         if (capture_ok && write_ppm(raw_capture_path_, file_img)) {
           pending_events_.push_back(PayloadEvent{"camera_capture_completed", "info", "Image-file capture ready", raw_capture_path_});
@@ -546,7 +552,7 @@ void PayloadSim::act(double){
 
       if (capture_ok) {
         std::string e3;
-        if (!read_ppm(raw_capture_path_, capture, e3)) {
+        if (!read_image_auto(raw_capture_path_, capture, e3)) {
           capture_ok = false;
           pending_events_.push_back(PayloadEvent{"camera_capture_failed", "warn", "Failed to read captured image", e3});
         }

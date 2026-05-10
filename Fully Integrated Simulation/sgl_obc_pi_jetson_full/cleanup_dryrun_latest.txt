@@ -1,0 +1,180 @@
+Output roots summary:
+  15G  /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs
+  455M  /home/bunta/sgl/sgl_obc_pi_jetson_full/out_profile
+
+Largest packaged run directories:
+37M	/home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo
+37M	/home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo
+37M	/home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo
+37M	/home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo
+37M	/home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo
+4.8G	/home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260506_015944_mars_jpg_2048_force_complete
+4.9G	/home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260506_015624_earth_jpg_2048_force_complete
+5.0G	/home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260506_020247_saturn_jpg_2048_force_complete
+
+Retention policy summary:
+  keep lightweight runs: 5
+  keep full runs:        3
+  prune heavy:           1
+  preserve markers:      0
+
+Classification:
+  full runs kept:        3
+  lightweight runs kept: 5
+  runs to prune heavy:   5
+  runs to delete:        0
+  preserved runs:        0
+  out_profile prune dirs:0
+  out_profile preserved: 0
+
+Estimated cleanup impact:
+  delete entire runs:  0.0B
+  prune heavy data:    655.0B
+  prune out_profile:   0.0B
+  total freed estimate: 655.0B
+
+Runs to prune to lightweight-only:
+  /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo
+  /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo
+  /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo
+  /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo
+  /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo
+
+Prune plan (retained lightweight files + pruned heavy roots):
+  Run: /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo
+    Prune candidates:
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/heavy/
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/raw_ppm/
+      duplicate *.ppm where PNG exists
+      ring_frame_*.ppm / full_ring_*.ppm / ring_preview_*.ppm
+      annulus *.bin / *annulus* files
+    Retained lightweight files:
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_0/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_0/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_1/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_1/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_2/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_2/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_3/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_3/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_4/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_4/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_5/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_5/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_6/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_6/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_7/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_7/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_8/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/datasets/dataset_8/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_072045_live_systems_demo/images/products/dataset_0_s2_refined_512.png
+  Run: /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo
+    Prune candidates:
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/heavy/
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/raw_ppm/
+      duplicate *.ppm where PNG exists
+      ring_frame_*.ppm / full_ring_*.ppm / ring_preview_*.ppm
+      annulus *.bin / *annulus* files
+    Retained lightweight files:
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_0/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_0/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_1/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_1/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_2/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_2/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_3/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_3/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_4/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_4/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_5/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_5/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_6/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_6/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_7/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_7/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_8/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/datasets/dataset_8/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_132846_live_systems_demo/images/products/dataset_0_s2_refined_512.png
+  Run: /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo
+    Prune candidates:
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/heavy/
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/raw_ppm/
+      duplicate *.ppm where PNG exists
+      ring_frame_*.ppm / full_ring_*.ppm / ring_preview_*.ppm
+      annulus *.bin / *annulus* files
+    Retained lightweight files:
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_0/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_0/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_1/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_1/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_2/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_2/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_3/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_3/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_4/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_4/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_5/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_5/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_6/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_6/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_7/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_7/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_8/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/datasets/dataset_8/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260503_234214_live_systems_demo/images/products/dataset_0_s2_refined_512.png
+  Run: /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo
+    Prune candidates:
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/heavy/
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/raw_ppm/
+      duplicate *.ppm where PNG exists
+      ring_frame_*.ppm / full_ring_*.ppm / ring_preview_*.ppm
+      annulus *.bin / *annulus* files
+    Retained lightweight files:
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_0/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_0/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_1/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_1/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_2/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_2/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_3/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_3/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_4/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_4/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_5/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_5/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_6/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_6/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_7/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_7/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_8/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/datasets/dataset_8/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000022_live_systems_demo/images/products/dataset_0_s2_refined_512.png
+  Run: /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo
+    Prune candidates:
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/heavy/
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/raw_ppm/
+      duplicate *.ppm where PNG exists
+      ring_frame_*.ppm / full_ring_*.ppm / ring_preview_*.ppm
+      annulus *.bin / *annulus* files
+    Retained lightweight files:
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_0/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_0/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_1/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_1/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_2/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_2/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_3/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_3/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_4/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_4/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_5/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_5/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_6/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_6/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_7/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_7/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_8/preconditioned_source.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/datasets/dataset_8/source_overlay.png
+      /home/bunta/sgl/sgl_obc_pi_jetson_full/outputs/20260504_000940_live_systems_demo/images/products/dataset_0_s2_refined_512.png
+
+Dry run only. No files were deleted.

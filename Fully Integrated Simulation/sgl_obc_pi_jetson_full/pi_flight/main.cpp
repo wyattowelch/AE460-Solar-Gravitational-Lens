@@ -964,7 +964,7 @@ int main(int argc, char** argv) {
         sgl::ImageRGBA out{};
         if (!p.empty()) {
           std::string ee;
-          sgl::read_ppm(p, out, ee);
+          sgl::read_image_auto(p, out, ee);
         }
         return out;
       };
