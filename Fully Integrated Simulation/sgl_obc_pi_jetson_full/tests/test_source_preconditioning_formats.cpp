@@ -260,10 +260,125 @@ int main(int argc, char** argv) {
         std::cerr << "missing source overlay for " << src << "\n";
         return 1;
       }
+      if (!out.source_texture_mask_path.empty() && !fs::exists(out.source_texture_mask_path)) {
+        std::cerr << "missing source texture mask for " << src << "\n";
+        return 1;
+      }
       if (out.margin_fraction < 0.02) {
         std::cerr << "suspiciously low post margin for " << src << ": " << out.margin_fraction << "\n";
         return 1;
       }
+    }
+  }
+
+  // Synthetic non-square disk input regression: preconditioning must keep disk circular.
+  {
+    sgl::ImageRGBA synth{};
+    synth.w = 1200;
+    synth.h = 800;
+    synth.rgba.assign(4ull * synth.w * synth.h, 255);
+    for (size_t i = 0; i < static_cast<size_t>(synth.w) * synth.h; ++i) {
+      synth.rgba[4 * i + 0] = 8;
+      synth.rgba[4 * i + 1] = 8;
+      synth.rgba[4 * i + 2] = 8;
+    }
+    const double cx = 760.0, cy = 430.0, r = 250.0;
+    for (unsigned y = 0; y < synth.h; ++y) {
+      for (unsigned x = 0; x < synth.w; ++x) {
+        const double dx = static_cast<double>(x) - cx;
+        const double dy = static_cast<double>(y) - cy;
+        if (dx * dx + dy * dy > r * r) continue;
+        const size_t i = 4ull * (static_cast<size_t>(y) * synth.w + x);
+        const double rr = std::sqrt(dx * dx + dy * dy) / r;
+        synth.rgba[i + 0] = static_cast<uint8_t>(std::lround(20 + 60 * (1.0 - rr)));
+        synth.rgba[i + 1] = static_cast<uint8_t>(std::lround(70 + 90 * (1.0 - rr * 0.7)));
+        synth.rgba[i + 2] = static_cast<uint8_t>(std::lround(140 + 90 * (1.0 - rr * 0.6)));
+      }
+    }
+    if (!sgl::write_ppm((tmp_root / "synthetic_phone_earth.ppm").string(), synth)) {
+      std::cerr << "failed to write synthetic source\n";
+      return 1;
+    }
+    // Keep pipeline path via read_image_auto by reusing ppm written above.
+    const fs::path synth_ppm = tmp_root / "synthetic_phone_earth.ppm";
+    sgl::SourcePreconditioningResult out{};
+    std::string err;
+    if (!sgl::precondition_source_image(synth_ppm.string(), (tmp_root / "synthetic_case").string(), cfg, out, err)) {
+      std::cerr << "precondition synthetic non-square failed: " << err << "\n";
+      return 1;
+    }
+    sgl::ImageRGBA pre{};
+    if (!sgl::read_image_auto(out.preconditioned_source_path, pre, err)) {
+      std::cerr << "read synthetic preconditioned failed: " << err << "\n";
+      return 1;
+    }
+    auto st = support_stats(pre, cfg.background_value);
+    if (!st.ok) {
+      std::cerr << "synthetic preconditioned support missing\n";
+      return 1;
+    }
+    const double ar = static_cast<double>(st.x1 - st.x0 + 1) / std::max(1.0, static_cast<double>(st.y1 - st.y0 + 1));
+    if (ar < 0.90 || ar > 1.10) {
+      std::cerr << "synthetic disk became non-circular after preconditioning: ar=" << ar << "\n";
+      return 1;
+    }
+    const int mpx = std::min({st.x0, st.y0, static_cast<int>(pre.w) - 1 - st.x1, static_cast<int>(pre.h) - 1 - st.y1});
+    const double margin_frac = static_cast<double>(mpx) / static_cast<double>(std::max(1u, std::min(pre.w, pre.h)));
+    if (margin_frac < 0.06) {
+      std::cerr << "synthetic disk margin too small after preconditioning: " << margin_frac << "\n";
+      return 1;
+    }
+  }
+
+  // Synthetic elliptical camera disk should be corrected toward circular geometry.
+  {
+    sgl::ImageRGBA synth{};
+    synth.w = 1400;
+    synth.h = 900;
+    synth.rgba.assign(4ull * synth.w * synth.h, 255);
+    for (size_t i = 0; i < static_cast<size_t>(synth.w) * synth.h; ++i) {
+      synth.rgba[4 * i + 0] = 18;
+      synth.rgba[4 * i + 1] = 18;
+      synth.rgba[4 * i + 2] = 18;
+    }
+    const double cx = 870.0, cy = 500.0, rx = 180.0, ry = 260.0;
+    for (unsigned y = 0; y < synth.h; ++y) {
+      for (unsigned x = 0; x < synth.w; ++x) {
+        const double ex = (static_cast<double>(x) - cx) / rx;
+        const double ey = (static_cast<double>(y) - cy) / ry;
+        if ((ex * ex + ey * ey) > 1.0) continue;
+        const size_t i = 4ull * (static_cast<size_t>(y) * synth.w + x);
+        const double rr = std::sqrt(ex * ex + ey * ey);
+        synth.rgba[i + 0] = static_cast<uint8_t>(std::lround(25 + 70 * (1.0 - rr)));
+        synth.rgba[i + 1] = static_cast<uint8_t>(std::lround(80 + 95 * (1.0 - rr * 0.7)));
+        synth.rgba[i + 2] = static_cast<uint8_t>(std::lround(150 + 85 * (1.0 - rr * 0.6)));
+      }
+    }
+    const fs::path synth_ppm = tmp_root / "synthetic_ellipse_phone_earth.ppm";
+    if (!sgl::write_ppm(synth_ppm.string(), synth)) {
+      std::cerr << "failed to write synthetic ellipse source\n";
+      return 1;
+    }
+    sgl::SourcePreconditioningResult out{};
+    std::string err;
+    if (!sgl::precondition_source_image(synth_ppm.string(), (tmp_root / "synthetic_ellipse_case").string(), cfg, out, err)) {
+      std::cerr << "precondition synthetic ellipse failed: " << err << "\n";
+      return 1;
+    }
+    sgl::ImageRGBA pre{};
+    if (!sgl::read_image_auto(out.preconditioned_source_path, pre, err)) {
+      std::cerr << "read synthetic ellipse preconditioned failed: " << err << "\n";
+      return 1;
+    }
+    auto st = support_stats(pre, cfg.background_value);
+    if (!st.ok) {
+      std::cerr << "synthetic ellipse preconditioned support missing\n";
+      return 1;
+    }
+    const double ar = static_cast<double>(st.x1 - st.x0 + 1) / std::max(1.0, static_cast<double>(st.y1 - st.y0 + 1));
+    if (ar < 0.88 || ar > 1.12) {
+      std::cerr << "synthetic elliptical disk not corrected near circular: ar=" << ar << "\n";
+      return 1;
     }
   }
   return 0;

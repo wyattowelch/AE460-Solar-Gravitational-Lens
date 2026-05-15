@@ -1,0 +1,144 @@
+SGL Full Run Commands Matrix (Earth + Mars, TCP/non-TCP, CUDA/non-CUDA, camera/no-camera)
+
+Working directory:
+  /home/bunta/sgl/sgl_obc_pi_jetson_full
+
+================================================================================
+0) Setup
+================================================================================
+
+cd /home/bunta/sgl/sgl_obc_pi_jetson_full
+python3 -m pip install -r tools/telemetry_dashboard/requirements.txt
+
+CPU build:
+./scripts/build_all.sh
+
+CUDA build (only on CUDA-capable host):
+SGL_ENABLE_CUDA=1 ./scripts/build_all.sh
+
+================================================================================
+1) Generate all matrix configs once
+================================================================================
+
+mkdir -p config/run_matrix
+python3 - <<'PY'
+import json, pathlib
+root = pathlib.Path("config/run_matrix")
+root.mkdir(parents=True, exist_ok=True)
+base = json.load(open("config/earth_jpg_2048_force_complete.json","r",encoding="utf-8"))
+planets = {"earth":"../bluemarble.jpg","mars":"../mars.jpg"}
+transports = {"local":"local","tcp":"tcp"}
+backends = {"cpu":"cpu","cuda":"cuda"}
+modes = {"nocam":"image_file","camera":"pi_camera_demo"}
+for p,src in planets.items():
+  for tname,tval in transports.items():
+    for bname,bval in backends.items():
+      for mname,mval in modes.items():
+        c=dict(base)
+        c["source_image"]=src
+        c["payload_input_mode"]=mval
+        c["jetson_transport"]=tval
+        c["jetson_backend"]=bval
+        c["jetson_allow_cpu_fallback"]=True
+        c["require_adcs_stable_for_jetson"]=(tval=="tcp")
+        c["host"]="127.0.0.1"
+        c["port"]=5500
+        c["profile_name"]=f"{p}_{tname}_{bname}_{mname}_2048"
+        c["out_dir"]=f"out_{p}_{tname}_{bname}_{mname}_2048"
+        c["jetson_scratch_dir"]=f"{c['out_dir']}/jetson_scratch"
+        out=root/f"{p}_{tname}_{bname}_{mname}.json"
+        json.dump(c,open(out,"w",encoding="utf-8"),indent=2)
+        print(out)
+PY
+
+================================================================================
+2) Non-TCP (local transport) full GUI runs
+================================================================================
+
+# Earth
+./scripts/run_gui_demo.sh config/run_matrix/earth_local_cpu_nocam.json 300
+./scripts/run_gui_demo.sh config/run_matrix/earth_local_cuda_nocam.json 300
+./scripts/run_gui_demo.sh config/run_matrix/earth_local_cpu_camera.json 300
+./scripts/run_gui_demo.sh config/run_matrix/earth_local_cuda_camera.json 300
+
+# Mars
+./scripts/run_gui_demo.sh config/run_matrix/mars_local_cpu_nocam.json 300
+./scripts/run_gui_demo.sh config/run_matrix/mars_local_cuda_nocam.json 300
+./scripts/run_gui_demo.sh config/run_matrix/mars_local_cpu_camera.json 300
+./scripts/run_gui_demo.sh config/run_matrix/mars_local_cuda_camera.json 300
+
+================================================================================
+3) TCP runs (3 terminals per case)
+================================================================================
+
+For each case below:
+  Terminal 1 (dashboard):
+    ./scripts/run_dashboard.sh --live <config> 300
+  Terminal 2 (Jetson service):
+    ./scripts/run_tcp_jetson.sh <config>
+  Terminal 3 (Pi flight):
+    ./scripts/run_tcp_pi.sh <config>
+
+CASE 1: Earth TCP CPU no camera
+  ./scripts/run_dashboard.sh --live config/run_matrix/earth_tcp_cpu_nocam.json 300
+  ./scripts/run_tcp_jetson.sh config/run_matrix/earth_tcp_cpu_nocam.json
+  ./scripts/run_tcp_pi.sh config/run_matrix/earth_tcp_cpu_nocam.json
+
+CASE 2: Earth TCP CUDA no camera
+  ./scripts/run_dashboard.sh --live config/run_matrix/earth_tcp_cuda_nocam.json 300
+  ./scripts/run_tcp_jetson.sh config/run_matrix/earth_tcp_cuda_nocam.json
+  ./scripts/run_tcp_pi.sh config/run_matrix/earth_tcp_cuda_nocam.json
+
+CASE 3: Earth TCP CPU camera
+  ./scripts/run_dashboard.sh --live config/run_matrix/earth_tcp_cpu_camera.json 300
+  ./scripts/run_tcp_jetson.sh config/run_matrix/earth_tcp_cpu_camera.json
+  ./scripts/run_tcp_pi.sh config/run_matrix/earth_tcp_cpu_camera.json
+
+CASE 4: Earth TCP CUDA camera
+  ./scripts/run_dashboard.sh --live config/run_matrix/earth_tcp_cuda_camera.json 300
+  ./scripts/run_tcp_jetson.sh config/run_matrix/earth_tcp_cuda_camera.json
+  ./scripts/run_tcp_pi.sh config/run_matrix/earth_tcp_cuda_camera.json
+
+CASE 5: Mars TCP CPU no camera
+  ./scripts/run_dashboard.sh --live config/run_matrix/mars_tcp_cpu_nocam.json 300
+  ./scripts/run_tcp_jetson.sh config/run_matrix/mars_tcp_cpu_nocam.json
+  ./scripts/run_tcp_pi.sh config/run_matrix/mars_tcp_cpu_nocam.json
+
+CASE 6: Mars TCP CUDA no camera
+  ./scripts/run_dashboard.sh --live config/run_matrix/mars_tcp_cuda_nocam.json 300
+  ./scripts/run_tcp_jetson.sh config/run_matrix/mars_tcp_cuda_nocam.json
+  ./scripts/run_tcp_pi.sh config/run_matrix/mars_tcp_cuda_nocam.json
+
+CASE 7: Mars TCP CPU camera
+  ./scripts/run_dashboard.sh --live config/run_matrix/mars_tcp_cpu_camera.json 300
+  ./scripts/run_tcp_jetson.sh config/run_matrix/mars_tcp_cpu_camera.json
+  ./scripts/run_tcp_pi.sh config/run_matrix/mars_tcp_cpu_camera.json
+
+CASE 8: Mars TCP CUDA camera
+  ./scripts/run_dashboard.sh --live config/run_matrix/mars_tcp_cuda_camera.json 300
+  ./scripts/run_tcp_jetson.sh config/run_matrix/mars_tcp_cuda_camera.json
+  ./scripts/run_tcp_pi.sh config/run_matrix/mars_tcp_cuda_camera.json
+
+================================================================================
+4) Output checks
+================================================================================
+
+After a run:
+ls -ld outputs/latest
+
+For a specific working output (example):
+ls out_earth_local_cpu_nocam_2048/mission_store
+ls out_earth_local_cpu_nocam_2048/products
+
+Open completed run in review mode:
+./scripts/run_dashboard.sh --review outputs/latest 1000
+
+================================================================================
+5) Notes
+================================================================================
+
+- On non-CUDA systems, CUDA-requested configs will resolve to CPU when
+  jetson_allow_cpu_fallback=true.
+- For strict CUDA-only behavior, set jetson_allow_cpu_fallback=false.
+- If camera is unavailable, pi_camera_demo may fall back to source image
+  depending on current config/implementation.

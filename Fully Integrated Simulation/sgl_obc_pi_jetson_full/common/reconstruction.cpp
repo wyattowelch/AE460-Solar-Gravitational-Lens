@@ -101,6 +101,8 @@ struct PlanetCandidate {
   bool ok = false;
   int x0 = 0, y0 = 0, x1 = -1, y1 = -1;
   double cx = 0.0, cy = 0.0, radius = 0.0;
+  double radius_x = 0.0, radius_y = 0.0;
+  double ellipse_axis_ratio = 1.0;
   double compactness = 0.0;
   double mask_coverage = 0.0;
   bool touches_edge = false;
@@ -168,6 +170,7 @@ static bool detect_planet_candidate(const ImageRGBA& in, PlanetCandidate& out) {
   int best_x0 = 0, best_y0 = 0, best_x1 = -1, best_y1 = -1, best_touch_count = 0;
   size_t best_area = 0;
   double best_cx = 0.0, best_cy = 0.0, best_r = 0.0;
+  double best_rx = 0.0, best_ry = 0.0, best_axis = 1.0;
   double best_compact = 0.0;
   bool best_touches = false;
   bool best_full_frame = false;
@@ -181,6 +184,7 @@ static bool detect_planet_candidate(const ImageRGBA& in, PlanetCandidate& out) {
       int cx0 = static_cast<int>(sx), cy0 = static_cast<int>(sy), cx1 = static_cast<int>(sx), cy1 = static_cast<int>(sy);
       size_t area = 0;
       double sat_sum = 0.0, sum_x = 0.0, sum_y = 0.0;
+      double sum_x2 = 0.0, sum_y2 = 0.0, sum_xy = 0.0;
       int edge_touch = 0;
       std::vector<size_t> pixels;
       stack.clear();
@@ -196,6 +200,9 @@ static bool detect_planet_candidate(const ImageRGBA& in, PlanetCandidate& out) {
         sat_sum += saturation_of(p);
         sum_x += x;
         sum_y += y;
+        sum_x2 += static_cast<double>(x) * static_cast<double>(x);
+        sum_y2 += static_cast<double>(y) * static_cast<double>(y);
+        sum_xy += static_cast<double>(x) * static_cast<double>(y);
         pixels.push_back(idx);
         cx0 = std::min(cx0, x); cy0 = std::min(cy0, y);
         cx1 = std::max(cx1, x); cy1 = std::max(cy1, y);
@@ -219,9 +226,20 @@ static bool detect_planet_candidate(const ImageRGBA& in, PlanetCandidate& out) {
       const double compact = static_cast<double>(area) / std::max(1, cw * ch);
       const int touch_count = ((edge_touch & 1) ? 1 : 0) + ((edge_touch & 2) ? 1 : 0) + ((edge_touch & 4) ? 1 : 0) + ((edge_touch & 8) ? 1 : 0);
       const bool full_frame_like = (cw > static_cast<int>(0.94 * in.w) && ch > static_cast<int>(0.94 * in.h)) || (compact > 0.80 && cw > static_cast<int>(0.90 * in.w) && ch > static_cast<int>(0.90 * in.h));
-      const double cxm = sum_x / std::max<double>(1.0, area);
-      const double cym = sum_y / std::max<double>(1.0, area);
+      const double inv_n = 1.0 / std::max<double>(1.0, area);
+      const double cxm = sum_x * inv_n;
+      const double cym = sum_y * inv_n;
+      const double mxx = sum_x2 * inv_n - cxm * cxm;
+      const double myy = sum_y2 * inv_n - cym * cym;
+      const double mxy = sum_xy * inv_n - cxm * cym;
+      const double tr = std::max(0.0, mxx + myy);
+      const double disc = std::max(0.0, (mxx - myy) * (mxx - myy) + 4.0 * mxy * mxy);
+      const double l1 = 0.5 * (tr + std::sqrt(disc));
+      const double l2 = 0.5 * (tr - std::sqrt(disc));
+      const double rx = std::max(2.0, 2.0 * std::sqrt(std::max(0.0, l1)));
+      const double ry = std::max(2.0, 2.0 * std::sqrt(std::max(0.0, l2)));
       const double r = std::sqrt(static_cast<double>(area) / M_PI);
+      const double axis_ratio = std::clamp(rx / std::max(1.0, ry), 1.0, 8.0);
       double edge_penalty = (touch_count >= 2) ? 0.35 : ((touch_count == 1) ? 0.65 : 1.0);
       if (full_frame_like) edge_penalty *= 0.20;
       const double score = static_cast<double>(area) * (0.60 + 0.40 * compact) * edge_penalty * (1.0 + sat_sum / std::max<double>(1.0, area));
@@ -230,6 +248,9 @@ static bool detect_planet_candidate(const ImageRGBA& in, PlanetCandidate& out) {
         best_area = area;
         best_x0 = cx0; best_y0 = cy0; best_x1 = cx1; best_y1 = cy1;
         best_cx = cxm; best_cy = cym; best_r = r;
+        best_rx = rx;
+        best_ry = ry;
+        best_axis = axis_ratio;
         best_compact = compact;
         best_touches = (touch_count > 0);
         best_touch_count = touch_count;
@@ -243,6 +264,9 @@ static bool detect_planet_candidate(const ImageRGBA& in, PlanetCandidate& out) {
   out.ok = true;
   out.x0 = best_x0; out.y0 = best_y0; out.x1 = best_x1; out.y1 = best_y1;
   out.cx = best_cx; out.cy = best_cy; out.radius = best_r;
+  out.radius_x = best_rx;
+  out.radius_y = best_ry;
+  out.ellipse_axis_ratio = best_axis;
   out.compactness = best_compact;
   out.mask_coverage = static_cast<double>(best_area) / std::max<size_t>(1, pix);
   out.touches_edge = best_touches;
@@ -328,6 +352,170 @@ static bool bbox_from_mask(const std::vector<uint8_t>& mask, unsigned w, unsigne
   return x1 >= x0 && y1 >= y0;
 }
 
+static bool largest_component_stats(const std::vector<uint8_t>& mask, unsigned w, unsigned h,
+                                    std::vector<uint8_t>& comp_mask,
+                                    int& x0, int& y0, int& x1, int& y1,
+                                    double& cx, double& cy, double& rx, double& ry) {
+  const size_t pix = static_cast<size_t>(w) * h;
+  if (mask.empty() || mask.size() != pix || w == 0 || h == 0) return false;
+  std::vector<uint8_t> vis(pix, 0u), best(pix, 0u);
+  std::vector<size_t> stack;
+  size_t best_area = 0;
+  x0 = static_cast<int>(w); y0 = static_cast<int>(h); x1 = -1; y1 = -1;
+  double bx=0, by=0, bxx=0, byy=0;
+  for (unsigned sy = 0; sy < h; ++sy) {
+    for (unsigned sx = 0; sx < w; ++sx) {
+      const size_t s = static_cast<size_t>(sy) * w + sx;
+      if (!mask[s] || vis[s]) continue;
+      int cx0 = static_cast<int>(sx), cy0 = static_cast<int>(sy), cx1 = static_cast<int>(sx), cy1 = static_cast<int>(sy);
+      size_t area = 0;
+      double sxm = 0.0, sym = 0.0, sx2 = 0.0, sy2 = 0.0;
+      std::vector<size_t> comp;
+      stack.clear();
+      stack.push_back(s);
+      vis[s] = 1u;
+      while (!stack.empty()) {
+        const size_t id = stack.back(); stack.pop_back();
+        comp.push_back(id); area++;
+        const int x = static_cast<int>(id % w), y = static_cast<int>(id / w);
+        cx0 = std::min(cx0, x); cy0 = std::min(cy0, y);
+        cx1 = std::max(cx1, x); cy1 = std::max(cy1, y);
+        sxm += x; sym += y; sx2 += static_cast<double>(x) * x; sy2 += static_cast<double>(y) * y;
+        const int nx[4] = {x - 1, x + 1, x, x};
+        const int ny[4] = {y, y, y - 1, y + 1};
+        for (int k = 0; k < 4; ++k) {
+          if (nx[k] < 0 || ny[k] < 0 || nx[k] >= static_cast<int>(w) || ny[k] >= static_cast<int>(h)) continue;
+          const size_t ni = static_cast<size_t>(ny[k]) * w + static_cast<size_t>(nx[k]);
+          if (!mask[ni] || vis[ni]) continue;
+          vis[ni] = 1u;
+          stack.push_back(ni);
+        }
+      }
+      if (area > best_area) {
+        best_area = area;
+        std::fill(best.begin(), best.end(), 0u);
+        for (size_t id : comp) best[id] = 1u;
+        x0 = cx0; y0 = cy0; x1 = cx1; y1 = cy1;
+        bx = sxm / static_cast<double>(area);
+        by = sym / static_cast<double>(area);
+        bxx = sx2 / static_cast<double>(area) - bx * bx;
+        byy = sy2 / static_cast<double>(area) - by * by;
+      }
+    }
+  }
+  if (best_area == 0 || x1 < x0 || y1 < y0) return false;
+  comp_mask = std::move(best);
+  cx = bx; cy = by;
+  rx = std::max(2.0, 2.0 * std::sqrt(std::max(0.0, bxx)));
+  ry = std::max(2.0, 2.0 * std::sqrt(std::max(0.0, byy)));
+  return true;
+}
+
+static bool fit_disk_photo_limb(const ImageRGBA& in, const BackgroundModel& bg, double cx, double cy,
+                                double seed_rx, double seed_ry,
+                                double& out_rx, double& out_ry) {
+  if (in.w == 0 || in.h == 0) return false;
+  const double r_guess = std::max(8.0, std::max(seed_rx, seed_ry) * 1.20);
+  const double r_max = std::min({r_guess, 0.5 * static_cast<double>(in.w - 1), 0.5 * static_cast<double>(in.h - 1)});
+  if (r_max < 8.0) return false;
+  auto object_like = [&](double x, double y) {
+    const auto rgb = sample_rgb_bilinear(in, x, y, 0);
+    const double r = rgb[0] / 255.0, g = rgb[1] / 255.0, b = rgb[2] / 255.0;
+    const double l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const double sat = std::max({r, g, b}) - std::min({r, g, b});
+    const double cd = std::sqrt((r - bg.r) * (r - bg.r) + (g - bg.g) * (g - bg.g) + (b - bg.b) * (b - bg.b));
+    return (cd > std::max(0.022, bg.sat + 0.010)) &&
+           (sat > std::max(0.020, bg.sat + 0.010) || std::fabs(l - bg.l) > 0.045);
+  };
+
+  double min_x = static_cast<double>(in.w), min_y = static_cast<double>(in.h);
+  double max_x = 0.0, max_y = 0.0;
+  int hits = 0;
+  const int angles = 720;
+  const double dr = 1.0;
+  for (int ai = 0; ai < angles; ++ai) {
+    const double th = (2.0 * M_PI * static_cast<double>(ai)) / static_cast<double>(angles);
+    const double ct = std::cos(th), st = std::sin(th);
+    int consec_obj = 0;
+    double last_obj_r = -1.0;
+    for (double r = 0.0; r <= r_max; r += dr) {
+      const double x = cx + r * ct;
+      const double y = cy + r * st;
+      if (x < 1.0 || y < 1.0 || x >= static_cast<double>(in.w - 2) || y >= static_cast<double>(in.h - 2)) break;
+      const bool obj = object_like(x, y);
+      if (obj) {
+        consec_obj++;
+        if (consec_obj >= 2) last_obj_r = r;
+      } else if (consec_obj > 0 && last_obj_r > 0.0) {
+        // crossed outer limb for this ray
+        break;
+      } else {
+        consec_obj = 0;
+      }
+    }
+    if (last_obj_r > 0.0) {
+      const double bx = cx + last_obj_r * ct;
+      const double by = cy + last_obj_r * st;
+      min_x = std::min(min_x, bx);
+      max_x = std::max(max_x, bx);
+      min_y = std::min(min_y, by);
+      max_y = std::max(max_y, by);
+      hits++;
+    }
+  }
+  if (hits < angles / 6 || max_x <= min_x || max_y <= min_y) return false;
+  out_rx = std::max(6.0, 0.5 * (max_x - min_x) * 1.01);
+  out_ry = std::max(6.0, 0.5 * (max_y - min_y) * 1.01);
+  return true;
+}
+
+static inline bool disk_photo_object_like_at(const ImageRGBA& in, const BackgroundModel& bg, double x, double y) {
+  const auto c = sample_rgb_bilinear(in, x, y, 0);
+  const double r = c[0] / 255.0, g = c[1] / 255.0, b = c[2] / 255.0;
+  const double l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const double sat = std::max({r, g, b}) - std::min({r, g, b});
+  const double cd = std::sqrt((r - bg.r) * (r - bg.r) + (g - bg.g) * (g - bg.g) + (b - bg.b) * (b - bg.b));
+  const double x0 = std::clamp(x - 2.0, 0.0, static_cast<double>(in.w - 1));
+  const double x1 = std::clamp(x + 2.0, 0.0, static_cast<double>(in.w - 1));
+  const double y0 = std::clamp(y - 2.0, 0.0, static_cast<double>(in.h - 1));
+  const double y1 = std::clamp(y + 2.0, 0.0, static_cast<double>(in.h - 1));
+  const auto cx0 = sample_rgb_bilinear(in, x0, y, 0);
+  const auto cx1 = sample_rgb_bilinear(in, x1, y, 0);
+  const auto cy0 = sample_rgb_bilinear(in, x, y0, 0);
+  const auto cy1 = sample_rgb_bilinear(in, x, y1, 0);
+  const auto lum = [](const std::array<double, 3>& cc) { return (0.2126 * cc[0] + 0.7152 * cc[1] + 0.0722 * cc[2]) / 255.0; };
+  const double gx = 0.5 * std::fabs(lum(cx1) - lum(cx0));
+  const double gy = 0.5 * std::fabs(lum(cy1) - lum(cy0));
+  const double edge = std::sqrt(gx * gx + gy * gy);
+  const bool chroma_obj = (cd > std::max(0.030, bg.sat + 0.010)) && (sat > std::max(0.030, bg.sat + 0.010));
+  const bool textured_obj = (cd > std::max(0.020, bg.sat + 0.006)) && edge > 0.020;
+  const bool matte_like = (sat < std::max(0.020, bg.sat + 0.006)) && edge < 0.012 && std::fabs(l - bg.l) < 0.035;
+  return !matte_like && (chroma_obj || textured_obj);
+}
+
+static double scan_disk_radius_1d(const ImageRGBA& in, const BackgroundModel& bg, double cx, double cy, int dx, int dy) {
+  const int max_steps = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(in.w) * in.w + static_cast<double>(in.h) * in.h)));
+  bool seen_obj = false;
+  int misses = 0;
+  double last_obj = 0.0;
+  for (int step = 0; step <= max_steps; ++step) {
+    const double x = cx + static_cast<double>(dx * step);
+    const double y = cy + static_cast<double>(dy * step);
+    if (x < 1.0 || y < 1.0 || x >= static_cast<double>(in.w - 2) || y >= static_cast<double>(in.h - 2)) break;
+    const bool obj = disk_photo_object_like_at(in, bg, x, y);
+    if (obj) {
+      seen_obj = true;
+      misses = 0;
+      last_obj = static_cast<double>(step);
+      continue;
+    }
+    if (!seen_obj) continue;
+    misses++;
+    if (misses >= 4) break;
+  }
+  return seen_obj ? last_obj : 0.0;
+}
+
 static std::vector<uint8_t> grow_support_from_seed(const ImageRGBA& in, const std::vector<uint8_t>& seed_mask, const BackgroundModel& bg) {
   const size_t pix = static_cast<size_t>(in.w) * in.h;
   if (seed_mask.empty() || seed_mask.size() != pix) return seed_mask;
@@ -405,10 +593,17 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
     bh = std::max(1, by1 - by0 + 1);
   }
   const double ar = static_cast<double>(bw) / static_cast<double>(bh);
+  const double axis_ratio = std::max(cand.ellipse_axis_ratio, 1.0);
+  const bool circular_candidate =
+      (cand.compactness > 0.45) &&
+      (axis_ratio <= 1.18) &&
+      (ar <= 1.30) &&
+      !cand.full_frame_like;
   std::string typ = cfg.object_type;
-  if (typ == "auto") typ = (ar > 1.35) ? "ringed_planet" : "disk_planet";
-  if (typ != "disk_planet" && typ != "ringed_planet" && typ != "extended_object") typ = "extended_object";
-  double fill = (typ == "disk_planet") ? std::clamp(cfg.disk_fill_fraction, 0.58, 0.62) : std::clamp(cfg.extended_fill_fraction, 0.35, 0.95);
+  if (typ == "auto") typ = (ar > 1.35 && !circular_candidate) ? "ringed_planet" : "disk_planet";
+  if (typ != "disk_planet" && typ != "disk_photo" && typ != "ringed_planet" && typ != "extended_object") typ = "extended_object";
+  const bool disk_photo_mode = (typ == "disk_photo");
+  double fill = ((typ == "disk_planet") || disk_photo_mode) ? std::clamp(cfg.disk_fill_fraction, 0.58, 0.62) : std::clamp(cfg.extended_fill_fraction, 0.35, 0.95);
   const int N = std::max(128, cfg.canvas_N);
   const double pad_frac = std::clamp(cfg.object_padding_fraction, 0.0, 0.40);
   const double min_margin = std::clamp(cfg.minimum_source_margin_fraction, 0.01, 0.30);
@@ -424,7 +619,12 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
   out.detected_planet_center_x = cand.cx;
   out.detected_planet_center_y = cand.cy;
   out.detected_planet_radius_px = disk_r;
+  out.detected_planet_radius_x_px = cand.radius_x;
+  out.detected_planet_radius_y_px = cand.radius_y;
+  out.detected_bbox_aspect = ar;
   out.mask_coverage_fraction = cand.mask_coverage;
+  double fit_cx = cand.cx, fit_cy = cand.cy;
+  double fit_rx = std::max(2.0, cand.radius_x), fit_ry = std::max(2.0, cand.radius_y);
 
   const double obj_cx = 0.5 * (bx0 + bx1);
   const double obj_cy = 0.5 * (by0 + by1);
@@ -437,14 +637,15 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
   double obj_span_x = 0.0, obj_span_y = 0.0;
   double s = 1.0;
 
-  if (typ == "disk_planet") {
+  if (typ == "disk_planet" || disk_photo_mode) {
     const double disk_pad = std::max(0.10, pad_frac);
-    crop_half_x = disk_r * (1.0 + disk_pad);
-    crop_half_y = disk_r * (1.0 + disk_pad);
+    const double disk_rr = std::max({disk_r, cand.radius_x, cand.radius_y});
+    crop_half_x = disk_rr * (1.0 + disk_pad);
+    crop_half_y = disk_rr * (1.0 + disk_pad);
     obj_span_x = std::max(1.0, 2.0 * crop_half_x);
     obj_span_y = std::max(1.0, 2.0 * crop_half_y);
     const double target_diameter = std::max(32.0, fill * static_cast<double>(N));
-    const double s_fill = target_diameter / std::max(1.0, 2.0 * disk_r);
+    const double s_fill = target_diameter / std::max(1.0, 2.0 * disk_rr);
     const double s_margin = max_extent / std::max(obj_span_x, obj_span_y);
     s = std::max(0.01, std::min(s_fill, s_margin));
   } else {
@@ -473,7 +674,199 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
   if (ow + 2 >= static_cast<unsigned>(N) || oh + 2 >= static_cast<unsigned>(N)) out.clipping_guard_triggered = true;
 
   std::vector<uint8_t> obj_mask = cand.mask;
-  if (typ != "disk_planet") {
+  std::vector<uint8_t> obj_mask_near;
+  std::vector<uint8_t> obj_core_mask;
+  int disk_photo_tx0 = 0, disk_photo_ty0 = 0, disk_photo_tx1 = -1, disk_photo_ty1 = -1;
+  bool disk_photo_have_tex_bbox = false;
+  int disk_photo_fg_x0 = 0, disk_photo_fg_y0 = 0, disk_photo_fg_x1 = -1, disk_photo_fg_y1 = -1;
+  bool disk_photo_have_fg_bbox = false;
+  double proposed_fit_rx = fit_rx, proposed_fit_ry = fit_ry;
+  bool proposed_fit_rejected = false;
+  std::string proposed_fit_reject_reason = "none";
+  std::string final_disk_photo_strategy = "none";
+  bool disk_photo_zoom_guard_warn = false;
+  double disk_photo_crop_cx = fit_cx, disk_photo_crop_cy = fit_cy, disk_photo_crop_half = 0.0;
+  int disk_photo_crop_x0 = 0, disk_photo_crop_y0 = 0, disk_photo_crop_x1 = -1, disk_photo_crop_y1 = -1;
+  double disk_photo_r_left = 0.0, disk_photo_r_right = 0.0, disk_photo_r_up = 0.0, disk_photo_r_down = 0.0;
+  std::string disk_photo_crop_source = "none";
+  if (typ == "disk_planet" || disk_photo_mode) {
+    // Build a texture-focused support mask so we do not preserve camera matte/background.
+    std::vector<uint8_t> tex(cand.mask.size(), 0u);
+    const int tx_pad = std::clamp(static_cast<int>(std::lround(0.10 * bw)), 8, 256);
+    const int ty_pad = std::clamp(static_cast<int>(std::lround(0.10 * bh)), 8, 256);
+    const int tx0 = std::max(0, bx0 - tx_pad);
+    const int ty0 = std::max(0, by0 - ty_pad);
+    const int tx1 = std::min(static_cast<int>(in.w) - 1, bx1 + tx_pad);
+    const int ty1 = std::min(static_cast<int>(in.h) - 1, by1 + ty_pad);
+    const double exr = std::max(2.0, cand.radius_x * 1.20);
+    const double eyr = std::max(2.0, cand.radius_y * 1.20);
+    for (int y = ty0; y <= ty1; ++y) {
+      for (int x = tx0; x <= tx1; ++x) {
+        const double ex = (static_cast<double>(x) - cand.cx) / exr;
+        const double ey = (static_cast<double>(y) - cand.cy) / eyr;
+        if ((ex * ex + ey * ey) > 1.0) continue;
+        const size_t i = static_cast<size_t>(y) * in.w + static_cast<size_t>(x);
+        const uint8_t* p = &in.rgba[4ull * i];
+        const double r = p[0] / 255.0, g = p[1] / 255.0, b = p[2] / 255.0;
+        const double l = lum_at(p);
+        const double s0 = saturation_of(p);
+        const double cd = std::sqrt((r - bg_model.r) * (r - bg_model.r) + (g - bg_model.g) * (g - bg_model.g) + (b - bg_model.b) * (b - bg_model.b));
+        const double lx = (x > 0 && x + 1 < static_cast<int>(in.w))
+                              ? 0.5 * std::fabs(lum_at(&in.rgba[4ull * (static_cast<size_t>(y) * in.w + static_cast<size_t>(x + 1))]) -
+                                                lum_at(&in.rgba[4ull * (static_cast<size_t>(y) * in.w + static_cast<size_t>(x - 1))]))
+                              : 0.0;
+        const double ly = (y > 0 && y + 1 < static_cast<int>(in.h))
+                              ? 0.5 * std::fabs(lum_at(&in.rgba[4ull * ((static_cast<size_t>(y + 1) * in.w) + static_cast<size_t>(x))]) -
+                                                lum_at(&in.rgba[4ull * ((static_cast<size_t>(y - 1) * in.w) + static_cast<size_t>(x))]))
+                              : 0.0;
+        const double edge = std::sqrt(lx * lx + ly * ly);
+        bool keep = false;
+        if (disk_photo_mode) {
+          // For phone/camera captures, do not inherit broad candidate mask directly:
+          // it can include side matte/background and pollute ellipse fit.
+          keep = (cd > std::max(0.030, bg_model.sat + 0.012)) &&
+                 (s0 > std::max(0.045, bg_model.sat + 0.018) || edge > 0.040 || std::fabs(l - bg_model.l) > 0.035);
+        } else {
+          keep = cand.mask[i] ||
+                 ((cd > std::max(0.028, bg_model.sat + 0.010)) &&
+                  (s0 > std::max(0.040, bg_model.sat + 0.015) || edge > 0.035 || std::fabs(l - bg_model.l) > 0.030));
+        }
+        tex[i] = keep ? 1u : 0u;
+      }
+    }
+    obj_core_mask = dilate_mask(tex, in.w, in.h, 1);
+    if (disk_photo_mode) {
+      std::vector<uint8_t> tex_comp;
+      int fx0 = 0, fy0 = 0, fx1 = -1, fy1 = -1;
+      double fcx = cand.cx, fcy = cand.cy, frx = fit_rx, fry = fit_ry;
+      if (largest_component_stats(obj_core_mask, in.w, in.h, tex_comp, fx0, fy0, fx1, fy1, fcx, fcy, frx, fry)) {
+        obj_core_mask = std::move(tex_comp);
+        fit_cx = fcx;
+        fit_cy = fcy;
+        disk_photo_have_tex_bbox = true;
+        disk_photo_tx0 = fx0; disk_photo_ty0 = fy0; disk_photo_tx1 = fx1; disk_photo_ty1 = fy1;
+        // Use robust bbox extents (less sensitive to side-matte variance than covariance radii).
+        const double bw_fit = std::max(1.0, static_cast<double>(fx1 - fx0 + 1));
+        const double bh_fit = std::max(1.0, static_cast<double>(fy1 - fy0 + 1));
+        const double rx_seed = std::max(4.0, 0.5 * bw_fit);
+        const double ry_seed = std::max(4.0, 0.5 * bh_fit);
+        fit_rx = rx_seed;
+        fit_ry = ry_seed;
+        // Refine with boundary/limb fit so we follow the visible Earth limb,
+        // not just interior texture distribution.
+        double limb_rx = fit_rx, limb_ry = fit_ry;
+        if (fit_disk_photo_limb(in, bg_model, fit_cx, fit_cy, rx_seed, ry_seed, limb_rx, limb_ry)) {
+          fit_rx = limb_rx;
+          fit_ry = limb_ry;
+        }
+        proposed_fit_rx = fit_rx;
+        proposed_fit_ry = fit_ry;
+      }
+    }
+    obj_mask = dilate_mask(obj_core_mask, in.w, in.h, std::clamp(static_cast<int>(std::lround(0.010 * std::max(bw, bh))), 2, 6));
+    obj_mask_near = dilate_mask(obj_mask, in.w, in.h, std::clamp(static_cast<int>(std::lround(0.015 * std::max(bw, bh))), 4, 12));
+    if (disk_photo_mode) {
+      const double fit_ar = std::max(proposed_fit_rx, proposed_fit_ry) / std::max(1e-6, std::min(proposed_fit_rx, proposed_fit_ry));
+      if (fit_ar > 1.15) {
+        proposed_fit_rejected = true;
+        proposed_fit_reject_reason = "anisotropic_fit_gt_1p15";
+      }
+      // Build a broad foreground mask from dark-background separation and keep largest component.
+      std::vector<uint8_t> fg(cand.mask.size(), 0u);
+      for (unsigned y = 0; y < in.h; ++y) {
+        for (unsigned x = 0; x < in.w; ++x) {
+          const size_t i = static_cast<size_t>(y) * in.w + x;
+          const uint8_t* p = &in.rgba[4ull * i];
+          const double r = p[0] / 255.0, g = p[1] / 255.0, b = p[2] / 255.0;
+          const double l = lum_at(p);
+          const double sat = saturation_of(p);
+          const double cd = std::sqrt((r - bg_model.r) * (r - bg_model.r) + (g - bg_model.g) * (g - bg_model.g) + (b - bg_model.b) * (b - bg_model.b));
+          const bool fg_like = (cd > std::max(0.030, bg_model.sat + 0.012)) ||
+                               (l > bg_model.l + 0.070) ||
+                               (sat > std::max(0.030, bg_model.sat + 0.010));
+          fg[i] = fg_like ? 1u : 0u;
+        }
+      }
+      std::vector<uint8_t> fg_comp;
+      int fgx0 = 0, fgy0 = 0, fgx1 = -1, fgy1 = -1;
+      double fgcx = fit_cx, fgcy = fit_cy, fgrx = 0.0, fgry = 0.0;
+      if (largest_component_stats(fg, in.w, in.h, fg_comp, fgx0, fgy0, fgx1, fgy1, fgcx, fgcy, fgrx, fgry)) {
+        disk_photo_have_fg_bbox = true;
+        disk_photo_fg_x0 = fgx0; disk_photo_fg_y0 = fgy0; disk_photo_fg_x1 = fgx1; disk_photo_fg_y1 = fgy1;
+        fit_cx = fgcx;
+        fit_cy = fgcy;
+      }
+      const bool manual_override =
+          (cfg.disk_photo_center_x >= 0.0) &&
+          (cfg.disk_photo_center_y >= 0.0) &&
+          ((cfg.disk_photo_crop_half_px > 8.0) || (cfg.disk_photo_radius_px > 8.0));
+      disk_photo_crop_cx = manual_override ? cfg.disk_photo_center_x : fit_cx;
+      disk_photo_crop_cy = manual_override ? cfg.disk_photo_center_y : fit_cy;
+      if (manual_override) {
+        disk_photo_crop_half = (cfg.disk_photo_crop_half_px > 8.0) ? cfg.disk_photo_crop_half_px : cfg.disk_photo_radius_px;
+        disk_photo_crop_source = "manual_override";
+      } else {
+        if (disk_photo_have_fg_bbox) {
+          const double fg_w = std::max(1.0, static_cast<double>(disk_photo_fg_x1 - disk_photo_fg_x0 + 1));
+          const double fg_h = std::max(1.0, static_cast<double>(disk_photo_fg_y1 - disk_photo_fg_y0 + 1));
+          disk_photo_crop_cx = 0.5 * (static_cast<double>(disk_photo_fg_x0) + static_cast<double>(disk_photo_fg_x1));
+          disk_photo_crop_cy = 0.5 * (static_cast<double>(disk_photo_fg_y0) + static_cast<double>(disk_photo_fg_y1));
+          disk_photo_crop_half = 0.5 * std::max(fg_w, fg_h) * 1.04;
+          disk_photo_crop_source = "foreground_bbox_square_crop";
+          disk_photo_r_left = disk_photo_crop_cx - static_cast<double>(disk_photo_fg_x0);
+          disk_photo_r_right = static_cast<double>(disk_photo_fg_x1) - disk_photo_crop_cx;
+          disk_photo_r_up = disk_photo_crop_cy - static_cast<double>(disk_photo_fg_y0);
+          disk_photo_r_down = static_cast<double>(disk_photo_fg_y1) - disk_photo_crop_cy;
+        } else {
+          disk_photo_r_left = scan_disk_radius_1d(in, bg_model, disk_photo_crop_cx, disk_photo_crop_cy, -1, 0);
+          disk_photo_r_right = scan_disk_radius_1d(in, bg_model, disk_photo_crop_cx, disk_photo_crop_cy, 1, 0);
+          disk_photo_r_up = scan_disk_radius_1d(in, bg_model, disk_photo_crop_cx, disk_photo_crop_cy, 0, -1);
+          disk_photo_r_down = scan_disk_radius_1d(in, bg_model, disk_photo_crop_cx, disk_photo_crop_cy, 0, 1);
+          std::vector<double> radii;
+          for (double r : {disk_photo_r_left, disk_photo_r_right, disk_photo_r_up, disk_photo_r_down}) {
+            if (r > 32.0) radii.push_back(r);
+          }
+          if (radii.size() >= 2) {
+            std::sort(radii.begin(), radii.end());
+            const double r_med = radii[radii.size() / 2];
+            disk_photo_crop_half = std::max(32.0, r_med * 1.03);
+            disk_photo_crop_source = "cardinal_scan";
+          } else {
+            const double tex_w = disk_photo_have_tex_bbox ? static_cast<double>(disk_photo_tx1 - disk_photo_tx0 + 1) : (2.0 * std::max(8.0, fit_rx));
+            const double tex_h = disk_photo_have_tex_bbox ? static_cast<double>(disk_photo_ty1 - disk_photo_ty0 + 1) : (2.0 * std::max(8.0, fit_ry));
+            disk_photo_crop_half = 0.5 * std::max(tex_w, tex_h) * 1.03;
+            disk_photo_crop_source = "texture_bbox_fallback";
+          }
+        }
+      }
+      const double max_half = 0.5 * std::max(8.0, static_cast<double>(std::min(in.w, in.h)) - 3.0);
+      disk_photo_crop_half = std::clamp(disk_photo_crop_half, 8.0, max_half);
+      if (disk_photo_crop_cx - disk_photo_crop_half < 1.0) disk_photo_crop_cx = 1.0 + disk_photo_crop_half;
+      if (disk_photo_crop_cx + disk_photo_crop_half > static_cast<double>(in.w) - 2.0) disk_photo_crop_cx = static_cast<double>(in.w) - 2.0 - disk_photo_crop_half;
+      if (disk_photo_crop_cy - disk_photo_crop_half < 1.0) disk_photo_crop_cy = 1.0 + disk_photo_crop_half;
+      if (disk_photo_crop_cy + disk_photo_crop_half > static_cast<double>(in.h) - 2.0) disk_photo_crop_cy = static_cast<double>(in.h) - 2.0 - disk_photo_crop_half;
+      disk_photo_crop_x0 = std::max(0, static_cast<int>(std::floor(disk_photo_crop_cx - disk_photo_crop_half)));
+      disk_photo_crop_y0 = std::max(0, static_cast<int>(std::floor(disk_photo_crop_cy - disk_photo_crop_half)));
+      disk_photo_crop_x1 = std::min(static_cast<int>(in.w) - 1, static_cast<int>(std::ceil(disk_photo_crop_cx + disk_photo_crop_half)));
+      disk_photo_crop_y1 = std::min(static_cast<int>(in.h) - 1, static_cast<int>(std::ceil(disk_photo_crop_cy + disk_photo_crop_half)));
+      if (disk_photo_have_fg_bbox) {
+        const double fg_max = std::max(1.0, static_cast<double>(std::max(disk_photo_fg_x1 - disk_photo_fg_x0 + 1, disk_photo_fg_y1 - disk_photo_fg_y0 + 1)));
+        if (disk_photo_crop_half < 0.45 * fg_max) {
+          disk_photo_zoom_guard_warn = true;
+          proposed_fit_rejected = true;
+          proposed_fit_reject_reason = "crop_half_too_small_vs_fg_bbox";
+        }
+      }
+      if (input_ppm.find("earth_camera") != std::string::npos) {
+        if (disk_photo_crop_half < 560.0 || disk_photo_crop_half > 620.0) disk_photo_zoom_guard_warn = true;
+      }
+      final_disk_photo_strategy = "square_crop_uniform";
+      fit_cx = disk_photo_crop_cx;
+      fit_cy = disk_photo_crop_cy;
+      fit_rx = std::max(8.0, disk_photo_crop_half);
+      fit_ry = std::max(8.0, disk_photo_crop_half);
+    }
+  } else {
     std::vector<uint8_t> seed = dilate_mask(cand.mask, in.w, in.h, std::clamp(static_cast<int>(std::lround(0.015 * std::max(bw, bh))), 2, 12));
     std::vector<uint8_t> support = grown_support.empty() ? cand.mask : grown_support;
     for (size_t i = 0; i < support.size() && i < seed.size(); ++i) {
@@ -521,78 +914,197 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
   const double inv_s = (s > 0.0) ? 1.0 / s : 1.0;
   const double disk_cx = cand.cx;
   const double disk_cy = cand.cy;
-  const double disk_rx = std::max(2.0, disk_r * 1.01);
-  const double disk_ry = std::max(2.0, disk_r * 1.01);
+  const double disk_rr = std::max({2.0, disk_r * 1.01, cand.radius_x * 1.01, cand.radius_y * 1.01});
+  double disk_corr_x = 1.0, disk_corr_y = 1.0;
+  if (typ == "disk_planet" || disk_photo_mode) {
+    const double rx = std::max(2.0, cand.radius_x);
+    const double ry = std::max(2.0, cand.radius_y);
+    const double rref = std::max(rx, ry);
+    const double ar = std::max(rx, ry) / std::max(1e-6, std::min(rx, ry));
+    // Avoid over-correcting already-round camera captures.
+    if (ar > 1.12) {
+      // Mild perspective: conservative correction. Strong perspective: allow stronger correction.
+      const double lo = (ar > 1.28) ? 0.80 : 0.92;
+      const double hi = (ar > 1.28) ? 1.25 : 1.12;
+      disk_corr_x = std::clamp(rref / rx, lo, hi);
+      disk_corr_y = std::clamp(rref / ry, lo, hi);
+    }
+  }
   std::vector<uint8_t> fg_out(static_cast<size_t>(N) * N, 0u);
-  for (unsigned y = 0; y < oh; ++y) for (unsigned x = 0; x < ow; ++x) {
+  if (disk_photo_mode) {
+    const double out_cx = 0.5 * (static_cast<double>(N) - 1.0);
+    const double out_cy = 0.5 * (static_cast<double>(N) - 1.0);
+    const double out_rr = std::max(4.0, 0.5 * fill * static_cast<double>(N));
+    const double src_half = std::max(8.0, disk_photo_crop_half);
+    for (int yy = 0; yy < N; ++yy) {
+      for (int xx = 0; xx < N; ++xx) {
+        const double u = (static_cast<double>(xx) - out_cx) / out_rr;
+        const double v = (static_cast<double>(yy) - out_cy) / out_rr;
+        if ((u * u + v * v) > 1.0) continue;
+        const double ssx = disk_photo_crop_cx + u * src_half;
+        const double ssy = disk_photo_crop_cy + v * src_half;
+        const auto s_rgb = sample_rgb_bilinear(in, ssx, ssy, static_cast<uint8_t>(bg));
+        const double sr = s_rgb[0] / 255.0, sg = s_rgb[1] / 255.0, sb = s_rgb[2] / 255.0;
+        const double sl = (0.2126 * sr + 0.7152 * sg + 0.0722 * sb);
+        const double ss = std::max({sr, sg, sb}) - std::min({sr, sg, sb});
+        const double scd = std::sqrt((sr - bg_model.r) * (sr - bg_model.r) + (sg - bg_model.g) * (sg - bg_model.g) + (sb - bg_model.b) * (sb - bg_model.b));
+        const bool matte_like =
+            (scd < std::max(0.018, bg_model.sat + 0.006)) &&
+            (ss < std::max(0.030, bg_model.sat + 0.010)) &&
+            (std::fabs(sl - bg_model.l) < 0.028);
+        if (matte_like) continue;
+        auto rgb = s_rgb;
+        const size_t di = 4ull * (static_cast<size_t>(yy) * canvas.w + static_cast<size_t>(xx));
+        canvas.rgba[di + 0] = static_cast<uint8_t>(std::lround(rgb[0]));
+        canvas.rgba[di + 1] = static_cast<uint8_t>(std::lround(rgb[1]));
+        canvas.rgba[di + 2] = static_cast<uint8_t>(std::lround(rgb[2]));
+        fg_out[static_cast<size_t>(yy) * static_cast<size_t>(N) + static_cast<size_t>(xx)] = 1u;
+      }
+    }
+  } else for (unsigned y = 0; y < oh; ++y) for (unsigned x = 0; x < ow; ++x) {
     const double sx = cx0 + (static_cast<double>(x) + 0.5) * inv_s;
     const double sy = cy0 + (static_cast<double>(y) + 0.5) * inv_s;
+    double ssx = sx;
+    double ssy = sy;
+    if (typ == "disk_planet") {
+      ssx = disk_cx + (sx - disk_cx) * disk_corr_x;
+      ssy = disk_cy + (sy - disk_cy) * disk_corr_y;
+    }
     bool keep = false;
     if (typ == "disk_planet") {
-      const double ex = (sx - disk_cx) / std::max(1.0, disk_rx);
-      const double ey = (sy - disk_cy) / std::max(1.0, disk_ry);
-      keep = (ex * ex + ey * ey) <= 1.0;
+      const double ex = (ssx - disk_cx) / std::max(1.0, disk_rr);
+      const double ey = (ssy - disk_cy) / std::max(1.0, disk_rr);
+      const bool inside_disk = (ex * ex + ey * ey) <= 1.0;
+      const bool texture_hit = mask_get_nearest(obj_mask, in.w, in.h, ssx, ssy);
+      const bool near_hit = !obj_mask_near.empty() && mask_get_nearest(obj_mask_near, in.w, in.h, ssx, ssy);
+      const bool core_hit = !obj_core_mask.empty() && mask_get_nearest(obj_core_mask, in.w, in.h, ssx, ssy);
+      const auto s_rgb = sample_rgb_bilinear(in, ssx, ssy, static_cast<uint8_t>(bg));
+      const double sr = s_rgb[0] / 255.0, sg = s_rgb[1] / 255.0, sb = s_rgb[2] / 255.0;
+      const double sl = (0.2126 * sr + 0.7152 * sg + 0.0722 * sb);
+      const double ss = std::max({sr, sg, sb}) - std::min({sr, sg, sb});
+      const double scd = std::sqrt((sr - bg_model.r) * (sr - bg_model.r) + (sg - bg_model.g) * (sg - bg_model.g) + (sb - bg_model.b) * (sb - bg_model.b));
+      const double sxm = std::max(0.0, std::min(static_cast<double>(in.w) - 1.0, ssx - 1.0));
+      const double sxp = std::max(0.0, std::min(static_cast<double>(in.w) - 1.0, ssx + 1.0));
+      const double sym = std::max(0.0, std::min(static_cast<double>(in.h) - 1.0, ssy - 1.0));
+      const double syp = std::max(0.0, std::min(static_cast<double>(in.h) - 1.0, ssy + 1.0));
+      const auto rgb_xm = sample_rgb_bilinear(in, sxm, ssy, static_cast<uint8_t>(bg));
+      const auto rgb_xp = sample_rgb_bilinear(in, sxp, ssy, static_cast<uint8_t>(bg));
+      const auto rgb_ym = sample_rgb_bilinear(in, ssx, sym, static_cast<uint8_t>(bg));
+      const auto rgb_yp = sample_rgb_bilinear(in, ssx, syp, static_cast<uint8_t>(bg));
+      const auto lum = [](const std::array<double, 3>& c) {
+        return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255.0;
+      };
+      const double edge_x = 0.5 * std::fabs(lum(rgb_xp) - lum(rgb_xm));
+      const double edge_y = 0.5 * std::fabs(lum(rgb_yp) - lum(rgb_ym));
+      const double edge = std::sqrt(edge_x * edge_x + edge_y * edge_y);
+      // Matte/background rejection for camera captures: conservative but explicit.
+      const bool obvious_matte =
+          (scd < std::max(0.014, bg_model.sat + 0.005)) &&
+          (ss < std::max(0.028, bg_model.sat + 0.010)) &&
+          (std::fabs(sl - bg_model.l) < 0.024) &&
+          (edge < 0.018);
+      // Geometry-first for disk objects: keep all disk pixels unless they are clear matte.
+      // Core/near mask acts as a guard so smooth limb pixels are preserved.
+      keep = inside_disk && (!obvious_matte || near_hit || core_hit || texture_hit);
     } else {
-      keep = mask_get_nearest(obj_mask, in.w, in.h, sx, sy);
+      keep = mask_get_nearest(obj_mask, in.w, in.h, ssx, ssy);
     }
     if (!keep) continue;
-    auto rgb = sample_rgb_bilinear(in, sx, sy, static_cast<uint8_t>(bg));
+    auto rgb = sample_rgb_bilinear(in, ssx, ssy, static_cast<uint8_t>(bg));
     const size_t di = 4ull * (static_cast<size_t>(oy + static_cast<int>(y)) * canvas.w + static_cast<size_t>(ox + static_cast<int>(x)));
     canvas.rgba[di + 0] = static_cast<uint8_t>(std::lround(rgb[0]));
     canvas.rgba[di + 1] = static_cast<uint8_t>(std::lround(rgb[1]));
     canvas.rgba[di + 2] = static_cast<uint8_t>(std::lround(rgb[2]));
     fg_out[static_cast<size_t>(oy + static_cast<int>(y)) * static_cast<size_t>(N) + static_cast<size_t>(ox + static_cast<int>(x))] = 1u;
   }
-  // Gentle deterministic normalization.
-  if (typ == "disk_planet") {
-    double mean = 0.0;
-    for (size_t i = 0; i < static_cast<size_t>(N) * N; ++i) mean += lum_at(&canvas.rgba[4 * i]);
-    mean /= static_cast<double>(N) * N;
-    const double tgt = 0.48;
-    const double gain = std::clamp(tgt / std::max(0.08, mean), 0.80, 1.25);
-    for (size_t i = 0; i < static_cast<size_t>(N) * N; ++i) for (int c = 0; c < 3; ++c) {
-      canvas.rgba[4 * i + c] = static_cast<uint8_t>(std::lround(std::clamp(canvas.rgba[4 * i + c] * gain, 0.0, 255.0)));
+  auto accum_stats = [](const ImageRGBA& img, const std::vector<uint8_t>& mask,
+                        double& mean_l, double& mean_s, double& std_l) {
+    mean_l = mean_s = std_l = 0.0;
+    double n = 0.0, m2 = 0.0;
+    for (size_t i = 0; i < mask.size(); ++i) {
+      if (!mask[i]) continue;
+      const uint8_t* p = &img.rgba[4 * i];
+      const double l = lum_at(p);
+      mean_l += l;
+      mean_s += saturation_of(p);
+      m2 += l * l;
+      n += 1.0;
     }
-  } else {
+    if (n > 0.0) {
+      mean_l /= n;
+      mean_s /= n;
+      std_l = std::sqrt(std::max(0.0, (m2 / n) - mean_l * mean_l));
+    }
+  };
+  // Conservative deterministic normalization based on object support only.
+  const std::string norm_mode = cfg.brightness_normalization_mode.empty() ? "auto" : cfg.brightness_normalization_mode;
+  const bool do_norm = (norm_mode != "off" && norm_mode != "preserve" && !disk_photo_mode);
+  out.tone_gain_used = 1.0;
+  if (do_norm) {
     double mean_obj = 0.0;
     double mean_sat_obj = 0.0;
+    double mean2_obj = 0.0;
     double n_obj = 0.0;
     for (size_t i = 0; i < static_cast<size_t>(N) * N; ++i) {
       if (fg_out[i] == 0) continue;
       const uint8_t* p = &canvas.rgba[4 * i];
-      mean_obj += lum_at(p);
+      const double l = lum_at(p);
+      mean_obj += l;
+      mean2_obj += l * l;
       mean_sat_obj += saturation_of(p);
       n_obj += 1.0;
     }
     if (n_obj > 0.0) {
       mean_obj /= n_obj;
+      mean2_obj /= n_obj;
       mean_sat_obj /= n_obj;
-      double gain = 1.0;
-      if (mean_obj < 0.30) {
-        gain = std::clamp(0.35 / std::max(0.10, mean_obj), 0.90, 1.10);
-      } else if (mean_obj > 0.62) {
-        gain = std::clamp(0.58 / std::max(0.40, mean_obj), 0.85, 1.00);
+      const double std_obj = std::sqrt(std::max(0.0, mean2_obj - mean_obj * mean_obj));
+      const double tgt = std::clamp(cfg.brightness_target_luma, 0.30, 0.60);
+      double gain = tgt / std::max(0.10, mean_obj);
+      double gmin = (typ == "disk_planet") ? cfg.brightness_gain_min_disk : cfg.brightness_gain_min_extended;
+      double gmax = (typ == "disk_planet") ? cfg.brightness_gain_max_disk : cfg.brightness_gain_max_extended;
+      if (norm_mode == "auto") {
+        if (typ != "disk_planet") gmax = std::min(gmax, 1.02);
+        if (mean_obj > 0.60) gmax = std::min(gmax, 1.00);
       }
-      double sat_gain = 1.0;
-      if (mean_sat_obj < 0.09) {
-        sat_gain = std::clamp(0.09 / std::max(0.03, mean_sat_obj), 1.00, 1.35);
+      // Phone/camera disk captures can be over-brightened easily; keep normalization conservative.
+      if (typ == "disk_planet" && (norm_mode == "auto" || norm_mode == "object_mean")) {
+        // Preserve tone by default unless the disk is truly dark.
+        if (mean_obj >= 0.40) {
+          gain = 1.0;
+          gmin = gmax = 1.0;
+        } else {
+          gmin = std::max(gmin, 0.97);
+          gmax = std::min(gmax, 1.02);
+          if (mean_sat_obj >= 0.09 || std_obj >= 0.14) {
+            gmax = std::min(gmax, 1.00);
+          }
+        }
       }
+      gain = std::clamp(gain, std::min(gmin, gmax), std::max(gmin, gmax));
+      out.tone_gain_used = gain;
       for (size_t i = 0; i < static_cast<size_t>(N) * N; ++i) {
         if (fg_out[i] == 0) continue;
-        double r = std::clamp(canvas.rgba[4 * i + 0] * gain, 0.0, 255.0);
-        double g = std::clamp(canvas.rgba[4 * i + 1] * gain, 0.0, 255.0);
-        double b = std::clamp(canvas.rgba[4 * i + 2] * gain, 0.0, 255.0);
-        if (sat_gain > 1.0001) {
-          const double ll = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          r = std::clamp(ll + (r - ll) * sat_gain, 0.0, 255.0);
-          g = std::clamp(ll + (g - ll) * sat_gain, 0.0, 255.0);
-          b = std::clamp(ll + (b - ll) * sat_gain, 0.0, 255.0);
+        for (int c = 0; c < 3; ++c) {
+          canvas.rgba[4 * i + c] = static_cast<uint8_t>(std::lround(std::clamp(canvas.rgba[4 * i + c] * gain, 0.0, 255.0)));
         }
-        canvas.rgba[4 * i + 0] = static_cast<uint8_t>(std::lround(r));
-        canvas.rgba[4 * i + 1] = static_cast<uint8_t>(std::lround(g));
-        canvas.rgba[4 * i + 2] = static_cast<uint8_t>(std::lround(b));
       }
     }
+  }
+  double pre_luma_dbg = 0.0, pre_sat_dbg = 0.0, pre_std_dbg = 0.0;
+  accum_stats(canvas, fg_out, pre_luma_dbg, pre_sat_dbg, pre_std_dbg);
+  double raw_fit_luma_dbg = 0.0, raw_fit_sat_dbg = 0.0, raw_fit_std_dbg = 0.0;
+  if (disk_photo_mode) {
+    std::vector<uint8_t> raw_fit_mask(static_cast<size_t>(in.w) * in.h, 0u);
+    const double rr = std::max(8.0, disk_photo_crop_half);
+    for (unsigned y = 0; y < in.h; ++y) {
+      for (unsigned x = 0; x < in.w; ++x) {
+        const double ex = (static_cast<double>(x) - disk_photo_crop_cx) / rr;
+        const double ey = (static_cast<double>(y) - disk_photo_crop_cy) / rr;
+        if ((ex * ex + ey * ey) <= 1.0) raw_fit_mask[static_cast<size_t>(y) * in.w + x] = 1u;
+      }
+    }
+    accum_stats(in, raw_fit_mask, raw_fit_luma_dbg, raw_fit_sat_dbg, raw_fit_std_dbg);
   }
   ImageRGBA mask = canvas, overlay = canvas;
   ImageRGBA src_mask = in, src_overlay = in;
@@ -614,16 +1126,78 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
       src_overlay.rgba[di + 0] = 255; src_overlay.rgba[di + 1] = 48; src_overlay.rgba[di + 2] = 48;
     }
   }
-  for (int x = cx0; x <= cx1; ++x) {
-    for (int y : {cy0, cy1}) {
+  const int ov_cx0 = disk_photo_mode ? disk_photo_crop_x0 : cx0;
+  const int ov_cy0 = disk_photo_mode ? disk_photo_crop_y0 : cy0;
+  const int ov_cx1 = disk_photo_mode ? disk_photo_crop_x1 : cx1;
+  const int ov_cy1 = disk_photo_mode ? disk_photo_crop_y1 : cy1;
+  for (int x = ov_cx0; x <= ov_cx1; ++x) {
+    for (int y : {ov_cy0, ov_cy1}) {
       const size_t di = 4ull * (static_cast<size_t>(y) * src_overlay.w + static_cast<size_t>(x));
       src_overlay.rgba[di + 0] = 255; src_overlay.rgba[di + 1] = 196; src_overlay.rgba[di + 2] = 0;
     }
   }
-  for (int y = cy0; y <= cy1; ++y) {
-    for (int x : {cx0, cx1}) {
+  for (int y = ov_cy0; y <= ov_cy1; ++y) {
+    for (int x : {ov_cx0, ov_cx1}) {
       const size_t di = 4ull * (static_cast<size_t>(y) * src_overlay.w + static_cast<size_t>(x));
       src_overlay.rgba[di + 0] = 255; src_overlay.rgba[di + 1] = 196; src_overlay.rgba[di + 2] = 0;
+    }
+  }
+  int tx0 = 0, ty0 = 0, tx1 = -1, ty1 = -1;
+  if (bbox_from_mask(obj_mask, in.w, in.h, tx0, ty0, tx1, ty1)) {
+    for (int x = tx0; x <= tx1; ++x) {
+      for (int y : {ty0, ty1}) {
+        const size_t di = 4ull * (static_cast<size_t>(y) * src_overlay.w + static_cast<size_t>(x));
+        src_overlay.rgba[di + 0] = 64; src_overlay.rgba[di + 1] = 255; src_overlay.rgba[di + 2] = 255;
+      }
+    }
+    for (int y = ty0; y <= ty1; ++y) {
+      for (int x : {tx0, tx1}) {
+        const size_t di = 4ull * (static_cast<size_t>(y) * src_overlay.w + static_cast<size_t>(x));
+        src_overlay.rgba[di + 0] = 64; src_overlay.rgba[di + 1] = 255; src_overlay.rgba[di + 2] = 255;
+      }
+    }
+  }
+  if (typ == "disk_planet" || disk_photo_mode) {
+    const double rx = disk_photo_mode ? std::max(2.0, fit_rx) : std::max(2.0, cand.radius_x);
+    const double ry = disk_photo_mode ? std::max(2.0, fit_ry) : std::max(2.0, cand.radius_y);
+    const double cxm = disk_photo_mode ? fit_cx : cand.cx;
+    const double cym = disk_photo_mode ? fit_cy : cand.cy;
+    for (int a = 0; a < 360; ++a) {
+      const double th = (2.0 * M_PI * static_cast<double>(a)) / 360.0;
+      const int x = static_cast<int>(std::lround(cxm + rx * std::cos(th)));
+      const int y = static_cast<int>(std::lround(cym + ry * std::sin(th)));
+      if (x < 0 || y < 0 || x >= static_cast<int>(src_overlay.w) || y >= static_cast<int>(src_overlay.h)) continue;
+      const size_t di = 4ull * (static_cast<size_t>(y) * src_overlay.w + static_cast<size_t>(x));
+      src_overlay.rgba[di + 0] = 255; src_overlay.rgba[di + 1] = 0; src_overlay.rgba[di + 2] = 255;
+    }
+  }
+  if (disk_photo_mode) {
+    const int ccx = static_cast<int>(std::lround(disk_photo_crop_cx));
+    const int ccy = static_cast<int>(std::lround(disk_photo_crop_cy));
+    for (int dy = -4; dy <= 4; ++dy) {
+      const int y = ccy + dy;
+      if (ccx >= 0 && ccx < static_cast<int>(src_overlay.w) && y >= 0 && y < static_cast<int>(src_overlay.h)) {
+        const size_t di = 4ull * (static_cast<size_t>(y) * src_overlay.w + static_cast<size_t>(ccx));
+        src_overlay.rgba[di + 0] = 255; src_overlay.rgba[di + 1] = 255; src_overlay.rgba[di + 2] = 255;
+      }
+    }
+    for (int dx = -4; dx <= 4; ++dx) {
+      const int x = ccx + dx;
+      if (x >= 0 && x < static_cast<int>(src_overlay.w) && ccy >= 0 && ccy < static_cast<int>(src_overlay.h)) {
+        const size_t di = 4ull * (static_cast<size_t>(ccy) * src_overlay.w + static_cast<size_t>(x));
+        src_overlay.rgba[di + 0] = 255; src_overlay.rgba[di + 1] = 255; src_overlay.rgba[di + 2] = 255;
+      }
+    }
+    const std::array<std::pair<int, int>, 4> pts = {{
+        {static_cast<int>(std::lround(disk_photo_crop_cx - disk_photo_r_left)), ccy},
+        {static_cast<int>(std::lround(disk_photo_crop_cx + disk_photo_r_right)), ccy},
+        {ccx, static_cast<int>(std::lround(disk_photo_crop_cy - disk_photo_r_up))},
+        {ccx, static_cast<int>(std::lround(disk_photo_crop_cy + disk_photo_r_down))}
+    }};
+    for (const auto& p : pts) {
+      if (p.first < 0 || p.second < 0 || p.first >= static_cast<int>(src_overlay.w) || p.second >= static_cast<int>(src_overlay.h)) continue;
+      const size_t di = 4ull * (static_cast<size_t>(p.second) * src_overlay.w + static_cast<size_t>(p.first));
+      src_overlay.rgba[di + 0] = 0; src_overlay.rgba[di + 1] = 255; src_overlay.rgba[di + 2] = 64;
     }
   }
   if (out.source_truncation_suspected) {
@@ -656,6 +1230,11 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
     const int margin_px = std::min({mx0, my0, N - 1 - mx1, N - 1 - my1});
     out.margin_fraction = static_cast<double>(margin_px) / static_cast<double>(N);
     if (out.margin_fraction < min_margin) out.clipping_guard_triggered = true;
+    const double ow2 = std::max(1, mx1 - mx0 + 1);
+    const double oh2 = std::max(1, my1 - my0 + 1);
+    out.output_support_aspect = ow2 / oh2;
+    const double ar_out = std::max(out.output_support_aspect, 1.0 / std::max(1e-6, out.output_support_aspect));
+    out.output_circularity_score = 1.0 / ar_out;
     for (int x = mx0; x <= mx1; ++x) {
       for (int y : {my0, my1}) {
         const size_t di = 4ull * (static_cast<size_t>(y) * canvas.w + static_cast<size_t>(x));
@@ -671,15 +1250,69 @@ bool precondition_source_image(const std::string& input_ppm,const std::string& o
   }
   out.preconditioned_source_path = (fs::path(out_dir) / "preconditioned_source.ppm").string();
   out.source_mask_path = (fs::path(out_dir) / "source_mask.ppm").string();
+  out.source_texture_mask_path = (fs::path(out_dir) / "source_texture_mask.ppm").string();
   out.source_overlay_path = (fs::path(out_dir) / "source_overlay.ppm").string();
   write_ppm(out.preconditioned_source_path, canvas);
   write_ppm(out.source_mask_path, src_mask);
+  {
+    ImageRGBA tex_mask = in;
+    for (size_t i = 0; i < static_cast<size_t>(in.w) * in.h; ++i) {
+      const uint8_t v = (!obj_mask.empty() && obj_mask[i]) ? 255 : 0;
+      tex_mask.rgba[4 * i + 0] = v;
+      tex_mask.rgba[4 * i + 1] = v;
+      tex_mask.rgba[4 * i + 2] = v;
+    }
+    write_ppm(out.source_texture_mask_path, tex_mask);
+  }
   write_ppm(out.source_overlay_path, src_overlay);
   out.ok = true;
   out.object_type_detected = typ;
   out.bbox_x0 = bx0; out.bbox_y0 = by0; out.bbox_x1 = bx1; out.bbox_y1 = by1;
   out.fill_fraction_used = fill;
-  out.method = (typ == "disk_planet") ? "disk_candidate_center_radius_norm" : "bbox_mask_center_scale_norm";
+  out.fit_center_x = fit_cx;
+  out.fit_center_y = fit_cy;
+  out.fit_radius_x_px = fit_rx;
+  out.fit_radius_y_px = fit_ry;
+  if (disk_photo_mode) {
+    std::ostringstream m;
+    m << "disk_photo_square_crop_uniform"
+      << ";cand_cx=" << cand.cx << ";cand_cy=" << cand.cy
+      << ";cand_rx=" << cand.radius_x << ";cand_ry=" << cand.radius_y
+      << ";proposed_fit_rx=" << proposed_fit_rx << ";proposed_fit_ry=" << proposed_fit_ry
+      << ";proposed_fit_aspect=" << (std::max(proposed_fit_rx, proposed_fit_ry) / std::max(1e-6, std::min(proposed_fit_rx, proposed_fit_ry)))
+      << ";fit_rejected=" << (proposed_fit_rejected ? 1 : 0)
+      << ";fit_reject_reason=" << proposed_fit_reject_reason
+      << ";fit_cx=" << fit_cx << ";fit_cy=" << fit_cy
+      << ";fit_rx=" << fit_rx << ";fit_ry=" << fit_ry
+      << ";fit_over_cand_rx=" << (fit_rx / std::max(1.0, cand.radius_x))
+      << ";fit_over_cand_ry=" << (fit_ry / std::max(1.0, cand.radius_y))
+      << ";disk_photo_mode_used=1"
+      << ";final_disk_photo_strategy=" << final_disk_photo_strategy
+      << ";fg_bbox_x0=" << disk_photo_fg_x0 << ";fg_bbox_y0=" << disk_photo_fg_y0
+      << ";fg_bbox_x1=" << disk_photo_fg_x1 << ";fg_bbox_y1=" << disk_photo_fg_y1
+      << ";fg_w=" << (disk_photo_have_fg_bbox ? (disk_photo_fg_x1 - disk_photo_fg_x0 + 1) : 0)
+      << ";fg_h=" << (disk_photo_have_fg_bbox ? (disk_photo_fg_y1 - disk_photo_fg_y0 + 1) : 0)
+      << ";crop_cx=" << disk_photo_crop_cx << ";crop_cy=" << disk_photo_crop_cy
+      << ";crop_half=" << disk_photo_crop_half
+      << ";crop_source=" << disk_photo_crop_source
+      << ";r_left=" << disk_photo_r_left << ";r_right=" << disk_photo_r_right
+      << ";r_up=" << disk_photo_r_up << ";r_down=" << disk_photo_r_down
+      << ";zoom_guard_warn=" << (disk_photo_zoom_guard_warn ? 1 : 0)
+      << ";crop_x0=" << disk_photo_crop_x0 << ";crop_y0=" << disk_photo_crop_y0
+      << ";crop_x1=" << disk_photo_crop_x1 << ";crop_y1=" << disk_photo_crop_y1
+      << ";scale_mode=uniform_square_crop"
+      << ";source_tone_mode=" << norm_mode
+      << ";disk_photo_tone_path=disabled"
+      << ";gain=" << out.tone_gain_used
+      << ";raw_fit_luma=" << raw_fit_luma_dbg
+      << ";raw_fit_sat=" << raw_fit_sat_dbg
+      << ";raw_fit_std=" << raw_fit_std_dbg
+      << ";pre_luma=" << pre_luma_dbg
+      << ";pre_sat=" << pre_sat_dbg
+      << ";pre_std=" << pre_std_dbg;
+    out.method = m.str();
+  }
+  else out.method = (typ == "disk_planet") ? "disk_candidate_center_radius_norm" : "bbox_mask_center_scale_norm";
   return true;
 }
 

@@ -14,6 +14,16 @@ struct Config {
   double source_object_padding_fraction=0.10;
   double minimum_source_margin_fraction=0.08;
   int source_background_value=0;
+  std::string source_brightness_normalization_mode="auto";
+  double source_brightness_target_luma=0.48;
+  double source_brightness_gain_min_disk=0.85;
+  double source_brightness_gain_max_disk=1.10;
+  double source_brightness_gain_min_extended=0.90;
+  double source_brightness_gain_max_extended=1.05;
+  double source_disk_photo_center_x=-1.0;
+  double source_disk_photo_center_y=-1.0;
+  double source_disk_photo_radius_px=-1.0;
+  double source_disk_photo_crop_half_px=-1.0;
   int ring_sensor_N=4096;
   double ring_radius_fraction=0.40;
   int ring_radial_width_px=64;

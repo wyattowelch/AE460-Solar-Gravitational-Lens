@@ -14,6 +14,16 @@ struct SourcePreconditioningConfig {
   double object_padding_fraction = 0.10;
   double minimum_source_margin_fraction = 0.08;
   int background_value = 0;
+  std::string brightness_normalization_mode = "auto";
+  double brightness_target_luma = 0.48;
+  double brightness_gain_min_disk = 0.85;
+  double brightness_gain_max_disk = 1.10;
+  double brightness_gain_min_extended = 0.90;
+  double brightness_gain_max_extended = 1.05;
+  double disk_photo_center_x = -1.0;
+  double disk_photo_center_y = -1.0;
+  double disk_photo_radius_px = -1.0;
+  double disk_photo_crop_half_px = -1.0;
 };
 struct SourcePreconditioningResult {
   bool ok = false;
@@ -28,10 +38,21 @@ struct SourcePreconditioningResult {
   double detected_planet_center_x = 0.0;
   double detected_planet_center_y = 0.0;
   double detected_planet_radius_px = 0.0;
+  double detected_planet_radius_x_px = 0.0;
+  double detected_planet_radius_y_px = 0.0;
   double mask_coverage_fraction = 0.0;
+  double detected_bbox_aspect = 0.0;
+  double output_support_aspect = 0.0;
+  double output_circularity_score = 0.0;
+  double fit_center_x = 0.0;
+  double fit_center_y = 0.0;
+  double fit_radius_x_px = 0.0;
+  double fit_radius_y_px = 0.0;
+  double tone_gain_used = 1.0;
   std::string method = "none";
   std::string preconditioned_source_path;
   std::string source_mask_path;
+  std::string source_texture_mask_path;
   std::string source_overlay_path;
 };
 struct SglObservationConfig {

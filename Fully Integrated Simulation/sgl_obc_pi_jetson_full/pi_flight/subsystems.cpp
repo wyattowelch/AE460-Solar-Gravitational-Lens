@@ -645,27 +645,48 @@ void PayloadSim::act(double){
           std::string chosen_err;
           SourcePreconditioningResult pre_rect{};
           std::string pre_rect_err;
-          const bool rect_ok = precondition_source_image(rectified_image_path_, ddir, pre_cfg_, pre_rect, pre_rect_err);
-          chosen = pre_rect;
-          chosen_err = pre_rect_err;
-          ok = rect_ok;
-          if ((!rect_ok || pre_rect.source_truncation_suspected) && !raw_capture_path_.empty() && raw_capture_path_ != rectified_image_path_) {
-            SourcePreconditioningResult pre_raw{};
-            std::string pre_raw_err;
-            const bool raw_ok = precondition_source_image(raw_capture_path_, ddir, pre_cfg_, pre_raw, pre_raw_err);
+          SourcePreconditioningResult pre_raw{};
+          std::string pre_raw_err;
+          bool rect_ok = false;
+          bool raw_ok = false;
+
+          const bool have_raw = !raw_capture_path_.empty() && raw_capture_path_ != rectified_image_path_;
+          const bool prefer_raw_first = (pre_cfg_.object_type == "disk_photo") && have_raw;
+
+          if (prefer_raw_first) {
+            raw_ok = precondition_source_image(raw_capture_path_, ddir, pre_cfg_, pre_raw, pre_raw_err);
             if (raw_ok) {
-              const bool prefer_raw =
-                  !rect_ok ||
-                  (!pre_raw.source_truncation_suspected && pre_rect.source_truncation_suspected) ||
-                  (pre_raw.source_margin_fraction_before > pre_rect.source_margin_fraction_before + 0.01);
-              if (prefer_raw) {
-                chosen = pre_raw;
-                chosen.used_raw_fallback_for_preconditioning = true;
-                chosen_err.clear();
-                ok = true;
+              chosen = pre_raw;
+              chosen.used_raw_fallback_for_preconditioning = true;
+              chosen_err.clear();
+              ok = true;
+            } else {
+              rect_ok = precondition_source_image(rectified_image_path_, ddir, pre_cfg_, pre_rect, pre_rect_err);
+              chosen = pre_rect;
+              chosen_err = pre_rect_err;
+              ok = rect_ok;
+            }
+          } else {
+            rect_ok = precondition_source_image(rectified_image_path_, ddir, pre_cfg_, pre_rect, pre_rect_err);
+            chosen = pre_rect;
+            chosen_err = pre_rect_err;
+            ok = rect_ok;
+            if ((!rect_ok || pre_rect.source_truncation_suspected) && have_raw) {
+              raw_ok = precondition_source_image(raw_capture_path_, ddir, pre_cfg_, pre_raw, pre_raw_err);
+              if (raw_ok) {
+                const bool prefer_raw =
+                    !rect_ok ||
+                    (!pre_raw.source_truncation_suspected && pre_rect.source_truncation_suspected) ||
+                    (pre_raw.source_margin_fraction_before > pre_rect.source_margin_fraction_before + 0.01);
+                if (prefer_raw) {
+                  chosen = pre_raw;
+                  chosen.used_raw_fallback_for_preconditioning = true;
+                  chosen_err.clear();
+                  ok = true;
+                }
+              } else if (!rect_ok) {
+                chosen_err = pre_raw_err;
               }
-            } else if (!rect_ok) {
-              chosen_err = pre_raw_err;
             }
           }
           const auto t_pre1 = std::chrono::steady_clock::now();

@@ -677,6 +677,16 @@ int main(int argc, char** argv) {
   pre_cfg.object_padding_fraction = C.source_object_padding_fraction;
   pre_cfg.minimum_source_margin_fraction = C.minimum_source_margin_fraction;
   pre_cfg.background_value = C.source_background_value;
+  pre_cfg.brightness_normalization_mode = C.source_brightness_normalization_mode;
+  pre_cfg.brightness_target_luma = C.source_brightness_target_luma;
+  pre_cfg.brightness_gain_min_disk = C.source_brightness_gain_min_disk;
+  pre_cfg.brightness_gain_max_disk = C.source_brightness_gain_max_disk;
+  pre_cfg.brightness_gain_min_extended = C.source_brightness_gain_min_extended;
+  pre_cfg.brightness_gain_max_extended = C.source_brightness_gain_max_extended;
+  pre_cfg.disk_photo_center_x = C.source_disk_photo_center_x;
+  pre_cfg.disk_photo_center_y = C.source_disk_photo_center_y;
+  pre_cfg.disk_photo_radius_px = C.source_disk_photo_radius_px;
+  pre_cfg.disk_photo_crop_half_px = C.source_disk_photo_crop_half_px;
   sgl::SglObservationConfig obs_cfg{};
   obs_cfg.ring_sensor_N = C.ring_sensor_N;
   obs_cfg.ring_radius_fraction = C.ring_radius_fraction;
