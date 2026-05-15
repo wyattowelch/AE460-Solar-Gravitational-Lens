@@ -175,6 +175,38 @@ Review a completed packaged case explicitly:
 ./scripts/run_dashboard.sh --review outputs/latest 1000
 ```
 
+## Jetson Camera-Photo Video Demo
+
+Build with CUDA enabled (falls back to CPU at runtime if unavailable):
+
+```bash
+SGL_ENABLE_CUDA=1 ./scripts/build_all.sh
+```
+
+Start long-running GUI demo (default CUDA-requesting config):
+
+```bash
+./scripts/run_earth_camera_video_demo.sh 300
+```
+
+Force CPU config:
+
+```bash
+./scripts/run_earth_camera_video_demo.sh --cpu 300
+```
+
+No-GUI run:
+
+```bash
+./scripts/run_local_demo.sh config/earth_camera_video_long_local_cuda.json
+```
+
+Review latest packaged run:
+
+```bash
+./scripts/run_dashboard.sh --review outputs/latest 1000
+```
+
 Adjust simulation runtime by editing `sim_cycles` in your config JSON.
 Adjust GUI update speed by changing the trailing refresh argument (milliseconds).
 Live dashboard pacing/smoothness (display-side only) is controlled by config keys:

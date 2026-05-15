@@ -46,6 +46,33 @@ python3 -m pip install -r tools/telemetry_dashboard/requirements.txt
 This starts a fresh live-output dashboard view by default and launches the simulation in the background.
 The dashboard runs in buffered live playback by default (display-only lag for smoother updates).
 
+### Jetson camera-photo video demo
+
+Use the tuned `../earth_camera.jpeg` long-run configs (local processing, no TCP):
+
+```bash
+SGL_ENABLE_CUDA=1 ./scripts/build_all.sh
+./scripts/run_earth_camera_video_demo.sh 300
+```
+
+CPU-safe variant:
+
+```bash
+./scripts/run_earth_camera_video_demo.sh --cpu 300
+```
+
+No-GUI variant:
+
+```bash
+./scripts/run_local_demo.sh config/earth_camera_video_long_local_cuda.json
+```
+
+Review latest packaged output:
+
+```bash
+./scripts/run_dashboard.sh --review outputs/latest 1000
+```
+
 ## 4. Enable These Dashboard Groups
 
 - Power/EPS
