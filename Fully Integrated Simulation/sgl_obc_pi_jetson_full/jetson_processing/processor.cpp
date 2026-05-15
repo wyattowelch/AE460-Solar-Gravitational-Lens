@@ -9,6 +9,9 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 namespace fs = std::filesystem;
 namespace sgl {
 namespace {
@@ -230,24 +233,97 @@ static ProcessResult reconstruct_from_sgl_dataset(const SglDataset& ds, unsigned
   }
 
   const int radial_subsamples = (r_step <= 1) ? 6 : ((r_step <= 2) ? 4 : 2);
-  for (int k = 0; k < obs_use; ++k) {
-    const auto& oi = ds.obs[(size_t)k];
-    const size_t base = (size_t)k * A * R * 3ull;
-    for (int a = 0; a < A; a += a_step) {
-      const double theta = 2.0 * kPi * (a + 0.5) / A + oi.phase;
-      for (int rr = 0; rr < R; rr += r_step) {
-        const size_t pi = base + ((size_t)a * R + (size_t)rr) * 3ull;
-        const double r0 = rmax * (double)rr / R;
-        const double r1 = rmax * (double)(rr + 1) / R;
-        const double inv_sub = 1.0 / static_cast<double>(radial_subsamples);
-        for (int rs = 0; rs < radial_subsamples; ++rs) {
-          const double sr = r0 + ((rs + 0.5) * inv_sub) * (r1 - r0);
-          const double x = cx + oi.dx * outW + sr * std::cos(theta);
-          const double y = cy + oi.dy * outH + sr * std::sin(theta);
-          add(x, y,
-              ds.annulus[pi + 0] * inv_sub,
-              ds.annulus[pi + 1] * inv_sub,
-              ds.annulus[pi + 2] * inv_sub);
+#ifdef _OPENMP
+  const int omp_threads = std::max(1, omp_get_max_threads());
+#else
+  const int omp_threads = 1;
+#endif
+  const size_t npx = (size_t)outW * outH;
+  const size_t bytes_per_thread = npx * sizeof(float) * 4ull;
+  const size_t max_parallel_bytes = 512ull * 1024ull * 1024ull;
+  const bool parallel_accum = compute_rois && (bytes_per_thread * (size_t)omp_threads <= max_parallel_bytes);
+
+  if (parallel_accum) {
+    std::vector<std::vector<float>> local_r((size_t)omp_threads, std::vector<float>(npx, 0.0f));
+    std::vector<std::vector<float>> local_g((size_t)omp_threads, std::vector<float>(npx, 0.0f));
+    std::vector<std::vector<float>> local_b((size_t)omp_threads, std::vector<float>(npx, 0.0f));
+    std::vector<std::vector<float>> local_w((size_t)omp_threads, std::vector<float>(npx, 0.0f));
+#pragma omp parallel for schedule(static)
+    for (int k = 0; k < obs_use; ++k) {
+#ifdef _OPENMP
+      const int tid = omp_get_thread_num();
+#else
+      const int tid = 0;
+#endif
+      auto& tr = local_r[(size_t)tid];
+      auto& tg = local_g[(size_t)tid];
+      auto& tb = local_b[(size_t)tid];
+      auto& tw = local_w[(size_t)tid];
+      const auto& oi = ds.obs[(size_t)k];
+      const size_t base = (size_t)k * A * R * 3ull;
+      for (int a = 0; a < A; a += a_step) {
+        const double theta = 2.0 * kPi * (a + 0.5) / A + oi.phase;
+        for (int rr = 0; rr < R; rr += r_step) {
+          const size_t pi = base + ((size_t)a * R + (size_t)rr) * 3ull;
+          const double r0 = rmax * (double)rr / R;
+          const double r1 = rmax * (double)(rr + 1) / R;
+          const double inv_sub = 1.0 / static_cast<double>(radial_subsamples);
+          for (int rs = 0; rs < radial_subsamples; ++rs) {
+            const double sr = r0 + ((rs + 0.5) * inv_sub) * (r1 - r0);
+            const double x = cx + oi.dx * outW + sr * std::cos(theta);
+            const double y = cy + oi.dy * outH + sr * std::sin(theta);
+            if (x < 0.0 || y < 0.0 || x > (double)(outW - 1) || y > (double)(outH - 1)) continue;
+            const int x0 = (int)std::floor(x), y0 = (int)std::floor(y);
+            const int x1 = std::min((int)outW - 1, x0 + 1), y1 = std::min((int)outH - 1, y0 + 1);
+            const double wx = x - x0, wy = y - y0;
+            const double w00 = (1.0 - wx) * (1.0 - wy), w10 = wx * (1.0 - wy), w01 = (1.0 - wx) * wy, w11 = wx * wy;
+            const double vr = ds.annulus[pi + 0] * inv_sub;
+            const double vg = ds.annulus[pi + 1] * inv_sub;
+            const double vb = ds.annulus[pi + 2] * inv_sub;
+            auto accum_local = [&](int xx, int yy, double wv) {
+              const size_t i = (size_t)yy * outW + (unsigned)xx;
+              tr[i] += (float)(vr * wv);
+              tg[i] += (float)(vg * wv);
+              tb[i] += (float)(vb * wv);
+              tw[i] += (float)wv;
+            };
+            accum_local(x0, y0, w00); accum_local(x1, y0, w10); accum_local(x0, y1, w01); accum_local(x1, y1, w11);
+          }
+        }
+      }
+    }
+    for (int t = 0; t < omp_threads; ++t) {
+      const auto& tr = local_r[(size_t)t];
+      const auto& tg = local_g[(size_t)t];
+      const auto& tb = local_b[(size_t)t];
+      const auto& tw = local_w[(size_t)t];
+      for (size_t i = 0; i < npx; ++i) {
+        acc_r[i] += tr[i];
+        acc_g[i] += tg[i];
+        acc_b[i] += tb[i];
+        wsum[i] += tw[i];
+      }
+    }
+  } else {
+    for (int k = 0; k < obs_use; ++k) {
+      const auto& oi = ds.obs[(size_t)k];
+      const size_t base = (size_t)k * A * R * 3ull;
+      for (int a = 0; a < A; a += a_step) {
+        const double theta = 2.0 * kPi * (a + 0.5) / A + oi.phase;
+        for (int rr = 0; rr < R; rr += r_step) {
+          const size_t pi = base + ((size_t)a * R + (size_t)rr) * 3ull;
+          const double r0 = rmax * (double)rr / R;
+          const double r1 = rmax * (double)(rr + 1) / R;
+          const double inv_sub = 1.0 / static_cast<double>(radial_subsamples);
+          for (int rs = 0; rs < radial_subsamples; ++rs) {
+            const double sr = r0 + ((rs + 0.5) * inv_sub) * (r1 - r0);
+            const double x = cx + oi.dx * outW + sr * std::cos(theta);
+            const double y = cy + oi.dy * outH + sr * std::sin(theta);
+            add(x, y,
+                ds.annulus[pi + 0] * inv_sub,
+                ds.annulus[pi + 1] * inv_sub,
+                ds.annulus[pi + 2] * inv_sub);
+          }
         }
       }
     }
@@ -353,12 +429,19 @@ static BackendResolution resolve_backend(std::string backend, bool allow_cpu_fal
 
 static std::string backend_status_prefix(const BackendResolution& be) {
   std::ostringstream oss;
+#ifdef _OPENMP
+  const int omp_max_threads = std::max(1, omp_get_max_threads());
+#else
+  const int omp_max_threads = 1;
+#endif
   oss << "backend_requested=" << be.requested
       << "; backend_resolved=" << be.resolved
       << "; cuda_build_enabled=" << (be.cuda_build_enabled ? 1 : 0)
       << "; cuda_runtime_available=" << (be.cuda_runtime_available ? 1 : 0)
       << "; fallback_used=" << (be.fallback_used ? 1 : 0)
-      << "; backend_reason=" << be.reason << "; ";
+      << "; backend_reason=" << be.reason
+      << "; omp_max_threads=" << omp_max_threads
+      << "; ";
   return oss.str();
 }
 
