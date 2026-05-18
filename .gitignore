@@ -8,7 +8,7 @@
 
 # Class/PDR context files kept local only
 *.pptx
-*.pdf
+
 sgl_code_docs_bundle_*.tar.gz
 
 # Generated SGL outputs/builds
